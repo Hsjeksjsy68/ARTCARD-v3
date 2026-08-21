@@ -441,38 +441,66 @@ export function PublicProfileModal({
                     )
                   ) : (
                     userListings.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {userListings.map(listing => (
-                          <div key={listing.id} className="bg-white border-2 border-black p-4 flex gap-4 items-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                            <div className="w-16 aspect-[750/1050] bg-white border-2 border-black shrink-0 overflow-hidden cursor-pointer" onClick={() => { onSelectCard(listing.card); onClose(); }}>
-                              <img src={listing.card.imageUrl} alt={listing.card.player} className="w-full h-full object-cover" />
-                            </div>
+                      (() => {
+                        const listingCountMap = new Map<string, number>();
+                        userListings.forEach(l => {
+                          listingCountMap.set(l.cardId, (listingCountMap.get(l.cardId) || 0) + 1);
+                        });
+                        const listingIndexMap = new Map<string, number>();
 
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-black text-[#D4FF00] border border-black">
-                                {listing.card.rarity}
-                              </span>
-                              <h5 className="text-sm font-black uppercase text-black truncate">{listing.card.player}</h5>
-                              <p className="text-[10px] font-bold text-neutral-500 uppercase truncate">{listing.card.team}</p>
-                              <div className="text-sm font-black text-emerald-600 font-mono pt-1">
-                                {formatCurrency(listing.price)}
-                              </div>
-                            </div>
+                        return (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {userListings.map(listing => {
+                              const totalForCard = listingCountMap.get(listing.cardId) || 1;
+                              const curIndex = (listingIndexMap.get(listing.cardId) || 0) + 1;
+                              listingIndexMap.set(listing.cardId, curIndex);
 
-                            {onBuyListing && currentUserId !== listing.sellerId && (
-                              <button
-                                onClick={() => {
-                                  onBuyListing(listing);
-                                  onClose();
-                                }}
-                                className="bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-3 py-2 text-xs font-black uppercase tracking-wider transition-colors shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                              >
-                                BUY NOW
-                              </button>
-                            )}
+                              return (
+                                <div key={listing.id} className="bg-white border-2 border-black p-4 flex gap-4 items-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                  <div className="w-16 aspect-[750/1050] bg-white border-2 border-black shrink-0 overflow-hidden cursor-pointer relative" onClick={() => { onSelectCard(listing.card); onClose(); }}>
+                                    <img src={listing.card.imageUrl} alt={listing.card.player} className="w-full h-full object-cover" />
+                                    {totalForCard > 1 && (
+                                      <div className="absolute top-1 right-1 bg-black text-[#D4FF00] px-1 py-0.2 text-[7px] font-black border border-black uppercase">
+                                        #{curIndex}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-black text-[#D4FF00] border border-black">
+                                        {listing.card.rarity}
+                                      </span>
+                                      {totalForCard > 1 && (
+                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.2 bg-[#D4FF00] text-black border border-black">
+                                          COPY #{curIndex}/{totalForCard}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <h5 className="text-sm font-black uppercase text-black truncate">{listing.card.player}</h5>
+                                    <p className="text-[10px] font-bold text-neutral-500 uppercase truncate">{listing.card.team}</p>
+                                    <div className="text-sm font-black text-emerald-600 font-mono pt-1">
+                                      {formatCurrency(listing.price)}
+                                    </div>
+                                  </div>
+
+                                  {onBuyListing && currentUserId !== listing.sellerId && (
+                                    <button
+                                      onClick={() => {
+                                        onBuyListing(listing);
+                                        onClose();
+                                      }}
+                                      className="bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-3 py-2 text-xs font-black uppercase tracking-wider transition-colors shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                    >
+                                      BUY NOW
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
-                      </div>
+                        );
+                      })()
                     ) : (
                       <div className="p-8 text-center bg-white border-2 border-black text-xs font-black uppercase text-neutral-500">
                         NO ACTIVE MARKET LISTINGS RIGHT NOW.

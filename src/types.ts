@@ -114,6 +114,26 @@ export interface MarketListing {
   soldAt?: number;
 }
 
+export interface MarketOffer {
+  id: string;
+  listingId: string;
+  cardId: string;
+  card: FootballCard;
+  sellerId: string;
+  sellerName?: string;
+  buyerId: string;
+  buyerName: string;
+  buyerAvatar?: string;
+  originalPrice: number;
+  offerAmount: number;
+  message?: string;
+  status: 'pending' | 'accepted' | 'declined' | 'countered' | 'cancelled';
+  counterAmount?: number;
+  counterMessage?: string;
+  createdAt: number;
+  updatedAt?: number;
+}
+
 export interface CommunityEvent {
   id: string;
   title: string;

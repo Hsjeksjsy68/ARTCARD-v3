@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { FootballCard, Rarity } from '../types';
+import { FootballCard, MarketListing, Rarity } from '../types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -10,6 +10,45 @@ export function formatCurrency(value: number, short = false) {
   const rounded = Math.round(Number(value || 0)).toLocaleString('en-US');
   if (short) return `${rounded} AC`;
   return `${rounded} ARTCOIN`;
+}
+
+/**
+ * Get base/starting price of a card (mint price / initial price)
+ */
+export function getCardStartingPrice(card: Partial<FootballCard>): number {
+  if (card.priceHistory && card.priceHistory.length > 0) {
+    const first = card.priceHistory[0];
+    if (first && typeof first.price === 'number') {
+      return first.price;
+    }
+  }
+  return Number(card.currentPrice) || 100;
+}
+
+/**
+ * Formula: ((starting card price + users listing prices in market) / amount of cards)
+ * Where amount of cards = 1 (starting base card) + count of active user listings
+ */
+export function calculateCardMarketPrice(card: Partial<FootballCard>, listings?: MarketListing[]): number {
+  if (!card) return 100;
+  const startingPrice = getCardStartingPrice(card);
+  
+  if (!listings || listings.length === 0) {
+    return startingPrice;
+  }
+
+  const activeListings = listings.filter(
+    l => l.status === 'active' && (l.cardId === card.id || l.card?.id === card.id)
+  );
+
+  if (activeListings.length === 0) {
+    return startingPrice;
+  }
+
+  const sumListingPrices = activeListings.reduce((sum, l) => sum + (Number(l.price) || 0), 0);
+  const totalCardUnits = 1 + activeListings.length;
+
+  return Math.round((startingPrice + sumListingPrices) / totalCardUnits);
 }
 
 export function getDefaultStock(card: Partial<FootballCard>): number {

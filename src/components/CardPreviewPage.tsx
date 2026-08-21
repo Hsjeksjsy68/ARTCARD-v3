@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FootballCard, MarketListing } from '../types';
 import { PriceChart } from './PriceChart';
-import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
+import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice } from '../lib/utils';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -35,7 +35,8 @@ import {
   Tag,
   Store,
   Layers,
-  Lock
+  Lock,
+  Calculator
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -471,6 +472,21 @@ export function CardPreviewPage({
                   {formatCurrency(minHistoricalPrice)} - {formatCurrency(maxHistoricalPrice)}
                 </p>
               </div>
+            </div>
+
+            {/* Dynamic Market Valuation Formula Breakdown */}
+            <div className="bg-neutral-50 border-2 border-black p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                  <Calculator size={14} className="text-black" /> DYNAMIC MARKET PRICE FORMULA
+                </span>
+                <span className="text-[9px] font-bold text-neutral-500 font-mono">
+                  (Starting Base + Market Listings) ÷ Total Units
+                </span>
+              </div>
+              <p className="text-[10px] font-bold text-neutral-600 uppercase leading-relaxed">
+                Market Value is dynamically calculated as: <span className="text-black font-black font-mono">({formatCurrency(getCardStartingPrice(card))} base + {activeMarketListings.length > 0 ? `${formatCurrency(activeMarketListings.reduce((s, l) => s + l.price, 0))} across ${activeMarketListings.length} market listings` : '0 listed'}) ÷ {1 + activeMarketListings.length} units</span> = <strong className="text-black font-black font-mono">{formatCurrency(card.currentPrice)}</strong>.
+              </p>
             </div>
 
             {/* Price Chart */}

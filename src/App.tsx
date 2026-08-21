@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
   Grid3X3, 
@@ -42,8 +42,8 @@ import { WalletModal } from './components/WalletModal';
 import { Marketplace } from './components/Marketplace';
 import { LeaderboardAndEvents } from './components/LeaderboardAndEvents';
 import { PublicProfileModal } from './components/PublicProfileModal';
-import { FootballCard, Pack } from './types';
-import { formatCurrency, getDefaultStock } from './lib/utils';
+import { FootballCard, Pack, MarketListing } from './types';
+import { formatCurrency, getDefaultStock, calculateCardMarketPrice } from './lib/utils';
 import { db, auth, onAuthStateChanged, collection, doc, setDoc, getDoc, User, deleteDoc, onSnapshot, getDocs, increment, updateDoc, addDoc } from './lib/firebase';
 
 export default function App() {
@@ -76,9 +76,10 @@ export default function App() {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [marketInitialSearch, setMarketInitialSearch] = useState<string>('');
-  const [marketInitialTab, setMarketInitialTab] = useState<'browse' | 'sell' | 'my-orders' | 'history'>('browse');
+  const [marketInitialTab, setMarketInitialTab] = useState<'browse' | 'sell' | 'offers' | 'my-orders' | 'history'>('browse');
   const [marketInitialSellCard, setMarketInitialSellCard] = useState<FootballCard | null>(null);
   const [cards, setCards] = useState<FootballCard[]>([]);
+  const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
   const [loadingCards, setLoadingCards] = useState(true);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [themes, setThemes] = useState<any[]>([]);
@@ -153,10 +154,22 @@ export default function App() {
       console.error("Error fetching themes:", error);
     });
 
+    const listingsRef = collection(db, 'market_listings');
+    const unsubscribeListings = onSnapshot(listingsRef, (snapshot) => {
+      const loadedListings: MarketListing[] = [];
+      snapshot.forEach(doc => {
+        loadedListings.push({ id: doc.id, ...doc.data() } as MarketListing);
+      });
+      setMarketListings(loadedListings);
+    }, (error) => {
+      console.error("Error fetching market listings for valuation:", error);
+    });
+
     return () => {
       unsubscribeCards();
       unsubscribePacks();
       unsubscribeThemes();
+      unsubscribeListings();
     };
   }, []);
 
@@ -305,8 +318,17 @@ export default function App() {
     setSortBy('default');
   };
 
+  // Dynamically calculate market value for all cards using the formula:
+  // ((starting card price + users listing prices in market) / amount of cards)
+  const dynamicCards = useMemo(() => {
+    return cards.map(c => ({
+      ...c,
+      currentPrice: calculateCardMarketPrice(c, marketListings)
+    }));
+  }, [cards, marketListings]);
+
   // Prepare items for display based on activeTab (Vault displays each owned copy)
-  const cardMap = new Map<string, FootballCard>(cards.map(c => [c.id, c]));
+  const cardMap = useMemo(() => new Map<string, FootballCard>(dynamicCards.map(c => [c.id, c])), [dynamicCards]);
 
   const baseCardsToFilter: { card: FootballCard; copyNumber?: number; totalCopies?: number; instanceKey: string }[] = 
     activeTab === 'vault'
@@ -331,7 +353,7 @@ export default function App() {
           });
           return items;
         })()
-      : cards.filter(card => !!card.imageUrl).map(c => ({
+      : dynamicCards.filter(card => !!card.imageUrl).map(c => ({
           card: c,
           instanceKey: c.id
         }));
@@ -412,16 +434,16 @@ export default function App() {
 
   let vaultValue = 0;
   vaultIds.forEach(id => {
-    const card = cardMap.get(id) || cards.find(c => c.id === id);
+    const card = cardMap.get(id) || dynamicCards.find(c => c.id === id);
     vaultValue += (card?.currentPrice || 0);
   });
 
-  const totalMarketCap = cards.filter(card => !!card.imageUrl).reduce((total, card) => total + card.currentPrice, 0);
+  const totalMarketCap = dynamicCards.filter(card => !!card.imageUrl).reduce((total, card) => total + card.currentPrice, 0);
 
-  const uniqueTeams = Array.from(new Set(cards.map(c => c.team).filter(Boolean))).sort();
-  const uniquePositions = Array.from(new Set(cards.map(c => c.position).filter(Boolean))).sort();
-  const uniqueRarities = Array.from(new Set(cards.map(c => c.rarity).filter(Boolean))).sort();
-  const uniqueEditions = Array.from(new Set(cards.map(c => c.edition).filter(Boolean))).sort();
+  const uniqueTeams = Array.from(new Set(dynamicCards.map(c => c.team).filter(Boolean))).sort();
+  const uniquePositions = Array.from(new Set(dynamicCards.map(c => c.position).filter(Boolean))).sort();
+  const uniqueRarities = Array.from(new Set(dynamicCards.map(c => c.rarity).filter(Boolean))).sort();
+  const uniqueEditions = Array.from(new Set(dynamicCards.map(c => c.edition).filter(Boolean))).sort();
 
   const activeFiltersCount = (searchQuery ? 1 : 0) + 
     (filterTeam ? 1 : 0) + 
@@ -634,9 +656,9 @@ export default function App() {
       {/* Main Content (Responsive Padding & Layout) */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 pb-24 lg:pb-12">
         {selectedCard ? (
-          <CardPreviewPage
-            card={selectedCard}
-            allCards={cards}
+          <CardPreviewPage 
+            card={cardMap.get(selectedCard.id) || selectedCard}
+            allCards={dynamicCards}
             inVault={vaultIds.includes(selectedCard.id)}
             ownedCount={getOwnedCount(selectedCard.id)}
             isFavorite={favoriteIds.has(selectedCard.id)}
@@ -655,7 +677,7 @@ export default function App() {
         ) : activeTab === 'profile' ? (
           <UserProfile
             user={user}
-            cards={cards}
+            cards={dynamicCards}
             vaultIds={vaultIds}
             favoriteIds={favoriteIds}
             onSelectCard={handleSelectCard}
@@ -666,7 +688,7 @@ export default function App() {
           <Marketplace
             user={user}
             walletBalance={walletBalance}
-            allCards={cards}
+            allCards={dynamicCards}
             vaultIds={vaultIds}
             onOpenWallet={() => setIsWalletOpen(true)}
             onOpenAuth={() => switchTab('profile')}
@@ -681,7 +703,7 @@ export default function App() {
           <LeaderboardAndEvents
             user={user}
             walletBalance={walletBalance}
-            allCards={cards}
+            allCards={dynamicCards}
             vaultIds={vaultIds}
             onOpenWallet={() => setIsWalletOpen(true)}
             onOpenAuth={() => switchTab('profile')}
@@ -692,7 +714,7 @@ export default function App() {
         ) : activeTab === 'admin' ? (
           (user?.email === 'grakibg@gmail.com' || user?.email === 'wwwrakibcom071@gmail.com' || user?.email === '1@1.com') ? (
             <div className="max-w-2xl mx-auto space-y-8">
-              <AdminForm onAdd={handleAddCard} totalCards={cards.filter(c => !!c.imageUrl).length} totalMarketCap={totalMarketCap} existingCards={cards} />
+              <AdminForm onAdd={handleAddCard} totalCards={dynamicCards.filter(c => !!c.imageUrl).length} totalMarketCap={totalMarketCap} existingCards={dynamicCards} />
             </div>
           ) : (
             <div className="text-center py-20 font-black tracking-widest text-neutral-500 uppercase">
@@ -701,7 +723,7 @@ export default function App() {
           )
         ) : activeTab === 'manage' ? (
           (user?.email === 'grakibg@gmail.com' || user?.email === 'wwwrakibcom071@gmail.com' || user?.email === '1@1.com') ? (
-            <ManageShop cards={cards} packs={packs} themes={themes} />
+            <ManageShop cards={dynamicCards} packs={packs} themes={themes} />
           ) : (
             <div className="text-center py-20 font-black tracking-widest text-neutral-500 uppercase">
                Access Denied
@@ -709,7 +731,7 @@ export default function App() {
           )
         ) : activeTab === 'shop' ? (
           <PackShop 
-            cards={cards} 
+            cards={dynamicCards} 
             packs={packs} 
             user={user}
             walletBalance={walletBalance}
