@@ -47,7 +47,9 @@ export interface CardTheme {
 export interface FootballCard {
   id: string;
   player: string;
-  team: string;
+  team: string; // Club team / Primary team
+  club?: string; // Explicit Club team
+  nationalTeam?: string; // National Team (e.g. Argentina, Portugal, France, Brazil, etc.)
   position: string;
   year: number;
   set: string;

@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { FootballCard, Rarity } from '../types';
 import { cn, formatCurrency } from '../lib/utils';
-import { ImagePlus, TrendingUp } from 'lucide-react';
+import { ImagePlus, TrendingUp, Sparkles, CheckCircle } from 'lucide-react';
+import { POPULAR_CLUBS, POPULAR_NATIONAL_TEAMS, getCardNationalTeam, getCardClubTeam, extractPlayerNameFromFileName } from '../lib/teams';
 
 interface AdminFormProps {
   onAdd: (card: FootballCard) => void;
@@ -11,7 +12,12 @@ interface AdminFormProps {
 }
 
 export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: AdminFormProps) {
-  const uniqueTeams = Array.from(new Set(existingCards.map(c => c.team).filter(Boolean))).sort();
+  const existingClubs = Array.from(new Set(existingCards.map(c => getCardClubTeam(c)).filter(Boolean)));
+  const allClubsList = Array.from(new Set([...existingClubs, ...POPULAR_CLUBS])).sort();
+  
+  const existingNations = Array.from(new Set(existingCards.map(c => getCardNationalTeam(c)).filter(Boolean)));
+  const allNationsList = Array.from(new Set([...existingNations, ...POPULAR_NATIONAL_TEAMS.map(n => n.name)])).sort();
+
   const uniquePositions = Array.from(new Set(existingCards.map(c => c.position).filter(Boolean))).sort();
   const uniqueYears = Array.from(new Set(existingCards.map(c => c.year).filter(Boolean))).sort((a, b) => b - a);
   const uniqueSets = Array.from(new Set(existingCards.map(c => c.set).filter(Boolean))).sort();
@@ -20,7 +26,8 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
 
   const [formData, setFormData] = useState({
     player: '',
-    team: '',
+    team: '', // Club team
+    nationalTeam: '', // National team
     position: '',
     year: '',
     set: '',
@@ -33,6 +40,7 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
   });
   
   const [imageUrl, setImageUrl] = useState<string>('');
+  const [detectedInfo, setDetectedInfo] = useState<{ fileName: string; playerName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -61,7 +69,9 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
     const newCard: FootballCard = {
       id: `custom-${Date.now()}`,
       player: formData.player,
-      team: formData.team,
+      team: formData.team, // Club Team
+      club: formData.team,
+      nationalTeam: formData.nationalTeam || undefined,
       position: formData.position,
       year: parseInt(formData.year, 10),
       set: formData.set,
@@ -85,6 +95,7 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
     setFormData({
       player: '',
       team: '',
+      nationalTeam: '',
       position: '',
       year: '',
       set: '',
@@ -96,6 +107,7 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
       maxSupply: '50'
     });
     setImageUrl('');
+    setDetectedInfo(null);
   };
 
 
@@ -106,6 +118,22 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Auto identify player name from image filename
+      // e.g. "Ruud_Gullit_custom_card.png" -> "RUUD GULLIT"
+      const extractedName = extractPlayerNameFromFileName(file.name);
+      if (extractedName) {
+        const detectedNation = getCardNationalTeam({ player: extractedName });
+        setDetectedInfo({
+          fileName: file.name,
+          playerName: extractedName
+        });
+        setFormData(prev => ({
+          ...prev,
+          player: extractedName,
+          nationalTeam: prev.nationalTeam ? prev.nationalTeam : (detectedNation || '')
+        }));
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         const img = new Image();
@@ -174,7 +202,12 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
           
           {/* Image Upload Area */}
           <div>
-             <label className={labelClasses}>Card Image</label>
+             <div className="flex items-center justify-between mb-2">
+               <label className={labelClasses}>Card Image</label>
+               <span className="text-[10px] font-black text-neutral-400 uppercase">
+                 Auto-detects player name from filename
+               </span>
+             </div>
              <div 
                onClick={() => fileInputRef.current?.click()}
                className="w-full h-40 border-2 border-dashed border-black bg-neutral-50 flex items-center justify-center cursor-pointer hover:bg-neutral-100 transition-colors relative overflow-hidden"
@@ -185,6 +218,7 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
                  <div className="flex flex-col items-center text-neutral-400">
                    <ImagePlus size={32} className="mb-2" />
                    <span className="text-sm font-black uppercase tracking-widest">Upload Image</span>
+                   <span className="text-[10px] text-neutral-400 mt-1 uppercase font-bold">e.g. Ruud_Gullit_custom_card.png</span>
                  </div>
                )}
                <input 
@@ -195,6 +229,17 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
                  className="hidden" 
                />
              </div>
+
+             {detectedInfo && (
+               <div className="mt-2.5 p-2.5 bg-[#D4FF00]/20 border-2 border-black flex items-center justify-between gap-2 text-xs font-black uppercase">
+                 <div className="flex items-center gap-2 truncate">
+                   <Sparkles size={16} className="text-black shrink-0" />
+                   <span className="text-neutral-600 font-bold truncate">Filename: <span className="font-mono text-black">{detectedInfo.fileName}</span></span>
+                   <span className="bg-black text-[#D4FF00] px-2 py-0.5 text-[10px] shrink-0">Identified: {detectedInfo.playerName}</span>
+                 </div>
+                 <CheckCircle size={16} className="text-black shrink-0" />
+               </div>
+             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -203,10 +248,17 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
               <input required type="text" name="player" value={formData.player} onChange={handleChange} className={inputClasses} placeholder="LIONEL MESSI" />
             </div>
             <div>
-              <label className={labelClasses}>Team</label>
-              <input required type="text" list="teams-list" name="team" value={formData.team} onChange={handleChange} className={inputClasses} placeholder="MIAMI FC" />
-              <datalist id="teams-list">
-                {uniqueTeams.map(t => <option key={t} value={t} />)}
+              <label className={labelClasses}>Club Team</label>
+              <input required type="text" list="clubs-list" name="team" value={formData.team} onChange={handleChange} className={inputClasses} placeholder="INTER MIAMI CF" />
+              <datalist id="clubs-list">
+                {allClubsList.map(t => <option key={t} value={t} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className={labelClasses}>National Team (Country)</label>
+              <input type="text" list="nations-list" name="nationalTeam" value={formData.nationalTeam} onChange={handleChange} className={inputClasses} placeholder="ARGENTINA" />
+              <datalist id="nations-list">
+                {allNationsList.map(n => <option key={n} value={n} />)}
               </datalist>
             </div>
             

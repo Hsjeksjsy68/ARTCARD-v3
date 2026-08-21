@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FootballCard, MarketListing, UserProfileData } from '../types';
 import { formatCurrency, cn, getDefaultStock } from '../lib/utils';
+import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { 
   db, 
   collection, 
@@ -73,7 +74,8 @@ export function Marketplace({
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRarity, setFilterRarity] = useState('');
-  const [filterTeam, setFilterTeam] = useState('');
+  const [filterClub, setFilterClub] = useState('');
+  const [filterNationalTeam, setFilterNationalTeam] = useState('');
   const [filterPosition, setFilterPosition] = useState('');
   const [filterEdition, setFilterEdition] = useState('');
   const [minPrice, setMinPrice] = useState('');
@@ -137,17 +139,24 @@ export function Marketplace({
     const card = l.card;
     if (!card) return false;
 
-    // Search query matching player, team, set
+    // Search query matching player, club team, national team, set
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
+      const club = (getCardClubTeam(card) || card.team || '').toLowerCase();
+      const nation = (getCardNationalTeam(card) || '').toLowerCase();
       const match = (card.player || '').toLowerCase().includes(q) ||
-                    (card.team || '').toLowerCase().includes(q) ||
+                    club.includes(q) ||
+                    nation.includes(q) ||
                     (card.set || '').toLowerCase().includes(q);
       if (!match) return false;
     }
 
+    const cardClub = getCardClubTeam(card) || card.team || '';
+    const cardNation = getCardNationalTeam(card) || '';
+
     if (filterRarity && card.rarity !== filterRarity) return false;
-    if (filterTeam && card.team !== filterTeam) return false;
+    if (filterClub && cardClub.toLowerCase() !== filterClub.toLowerCase()) return false;
+    if (filterNationalTeam && cardNation.toLowerCase() !== filterNationalTeam.toLowerCase()) return false;
     if (filterPosition && card.position !== filterPosition) return false;
     if (filterEdition && card.edition !== filterEdition) return false;
 
@@ -162,8 +171,9 @@ export function Marketplace({
     return (b.listedAt || 0) - (a.listedAt || 0); // newest first
   });
 
-  // Extract unique teams and editions for filter dropdowns
-  const availableTeams = Array.from(new Set(allCards.map(c => c.team).filter(Boolean))).sort();
+  // Extract unique clubs, national teams and editions for filter dropdowns
+  const availableClubs = Array.from(new Set(allCards.map(c => getCardClubTeam(c) || c.team).filter(Boolean))).sort();
+  const availableNations = Array.from(new Set(allCards.map(c => getCardNationalTeam(c)).filter(Boolean))).sort();
   const availableEditions = Array.from(new Set(allCards.map(c => c.edition).filter(Boolean))).sort();
 
   // Handle Listing a Vault card for sale
@@ -447,18 +457,42 @@ export function Marketplace({
         <div className="space-y-6">
           {/* Filters Bar */}
           <div className="bg-white border-2 border-black p-4 sm:p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
               {/* Search input (No search count display) */}
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                 <input
                   type="text"
-                  placeholder="SEARCH PLAYER, TEAM..."
+                  placeholder="SEARCH PLAYER, CLUB, NATION..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-neutral-50 border-2 border-black pl-9 pr-3 py-2 text-xs font-black uppercase focus:outline-none focus:bg-white"
                 />
               </div>
+
+              {/* Club */}
+              <select
+                value={filterClub}
+                onChange={(e) => setFilterClub(e.target.value)}
+                className="bg-neutral-50 border-2 border-black p-2 text-xs font-black uppercase focus:outline-none focus:bg-white"
+              >
+                <option value="">🏟️ ALL CLUBS</option>
+                {availableClubs.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+
+              {/* National Team */}
+              <select
+                value={filterNationalTeam}
+                onChange={(e) => setFilterNationalTeam(e.target.value)}
+                className="bg-neutral-50 border-2 border-black p-2 text-xs font-black uppercase focus:outline-none focus:bg-white"
+              >
+                <option value="">🌍 ALL NATIONAL TEAMS</option>
+                {availableNations.map(n => (
+                  <option key={n} value={n}>{getNationalTeamFlag(n)} {n}</option>
+                ))}
+              </select>
 
               {/* Rarity */}
               <select
@@ -473,27 +507,15 @@ export function Marketplace({
                 <option value="Base">BASE</option>
               </select>
 
-              {/* Team */}
-              <select
-                value={filterTeam}
-                onChange={(e) => setFilterTeam(e.target.value)}
-                className="bg-neutral-50 border-2 border-black p-2 text-xs font-black uppercase focus:outline-none focus:bg-white"
-              >
-                <option value="">ALL CLUBS / TEAMS</option>
-                {availableTeams.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-
               {/* Sort By */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
                 className="bg-neutral-50 border-2 border-black p-2 text-xs font-black uppercase focus:outline-none focus:bg-white"
               >
-                <option value="newest">NEWEST LISTINGS FIRST</option>
-                <option value="price-asc">PRICE: LOWEST TO HIGHEST</option>
-                <option value="price-desc">PRICE: HIGHEST TO LOWEST</option>
+                <option value="newest">NEWEST FIRST</option>
+                <option value="price-asc">PRICE: LOW TO HIGH</option>
+                <option value="price-desc">PRICE: HIGH TO LOW</option>
                 <option value="player-asc">PLAYER NAME (A-Z)</option>
               </select>
             </div>
@@ -519,12 +541,13 @@ export function Marketplace({
                 />
               </div>
 
-              {(searchQuery || filterRarity || filterTeam || filterEdition || minPrice || maxPrice) && (
+              {(searchQuery || filterRarity || filterClub || filterNationalTeam || filterEdition || minPrice || maxPrice) && (
                 <button
                   onClick={() => {
                     setSearchQuery('');
                     setFilterRarity('');
-                    setFilterTeam('');
+                    setFilterClub('');
+                    setFilterNationalTeam('');
                     setFilterEdition('');
                     setMinPrice('');
                     setMaxPrice('');
@@ -613,8 +636,14 @@ export function Marketplace({
                           {card.player}
                         </h4>
 
-                        <p className="text-[10px] font-bold text-neutral-500 uppercase truncate">
-                          {card.team} • {card.position}
+                        <p className="text-[10px] font-bold text-neutral-600 uppercase truncate flex items-center gap-1">
+                          <span>{getCardClubTeam(card) || card.team}</span>
+                          {getCardNationalTeam(card) && (
+                            <span className="text-neutral-500 font-bold">
+                              • {getNationalTeamFlag(getCardNationalTeam(card))} {getCardNationalTeam(card)}
+                            </span>
+                          )}
+                          <span>• {card.position}</span>
                         </p>
 
                         <div className="text-[9px] font-black text-neutral-600 uppercase">

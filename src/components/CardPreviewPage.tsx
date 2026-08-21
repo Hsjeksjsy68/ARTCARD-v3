@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FootballCard } from '../types';
 import { PriceChart } from './PriceChart';
 import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
+import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -292,10 +293,15 @@ export function CardPreviewPage({
           {/* Header Card Title */}
           <div className="bg-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black pb-3">
-              <div className="flex items-center gap-2">
-                <span className="bg-black text-white px-2.5 py-1 text-xs font-black uppercase tracking-widest">
-                  {card.team}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="bg-black text-white px-2.5 py-1 text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
+                  <span>🏟️</span> {getCardClubTeam(card) || card.team}
                 </span>
+                {getCardNationalTeam(card) && (
+                  <span className="bg-[#D4FF00] text-black border border-black px-2.5 py-1 text-xs font-black uppercase tracking-widest flex items-center gap-1.5">
+                    <span>{getNationalTeamFlag(getCardNationalTeam(card))}</span> {getCardNationalTeam(card)}
+                  </span>
+                )}
                 <span className="bg-neutral-200 text-black px-2.5 py-1 text-xs font-black uppercase tracking-widest">
                   {card.position}
                 </span>

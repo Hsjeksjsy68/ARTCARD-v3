@@ -3,6 +3,7 @@ import { FootballCard } from '../types';
 import { cn, formatCurrency, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
 import { motion } from 'motion/react';
 import { Shield, Sparkles, Star, Heart, Trophy, AlertCircle } from 'lucide-react';
+import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 
 interface CardItemProps {
   card: FootballCard;
@@ -33,6 +34,8 @@ export function CardItem({
   const maxSupply = getDefaultMaxSupply(card);
   const isSoldOut = stock <= 0;
   const isOwnedInVault = inVault ?? inCollection ?? (ownedCount !== undefined && ownedCount > 0);
+  const clubName = getCardClubTeam(card) || card.team;
+  const nationalName = getCardNationalTeam(card);
   
   // Format vault badge label (e.g. "VAULT", "VAULT (x3)", or "COPY #2/3")
   let vaultBadgeLabel = "VAULT";
@@ -143,7 +146,15 @@ export function CardItem({
             </div>
 
             <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-end bg-white relative z-10">
-              <div className="text-[8px] sm:text-[10px] text-neutral-500 font-black uppercase tracking-widest truncate">{card.team} • {card.position}</div>
+              <div className="text-[8px] sm:text-[10px] text-neutral-600 font-black uppercase tracking-widest truncate flex items-center gap-1.5">
+                <span>{clubName}</span>
+                {nationalName && (
+                  <span className="text-neutral-500 font-bold flex items-center gap-0.5">
+                    • {getNationalTeamFlag(nationalName)} {nationalName}
+                  </span>
+                )}
+                <span>• {card.position}</span>
+              </div>
               <div className="text-sm sm:text-lg md:text-xl font-black uppercase text-black truncate">{card.player}</div>
               <div className="text-[8px] sm:text-[9px] text-neutral-500 font-black uppercase mt-0.5 sm:mt-1 tracking-widest truncate">{card.year} {card.set} {card.edition && `• ${card.edition}`}</div>
             </div>

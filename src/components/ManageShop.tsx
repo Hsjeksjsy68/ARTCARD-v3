@@ -35,6 +35,7 @@ import { db, doc, deleteDoc, updateDoc, setDoc, collection, getDocs, onSnapshot 
 import { formatCurrency, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
 import { cardsDatabase } from '../data';
 import { DEFAULT_OFFICIAL_THEMES, PRESET_OVERLAYS, PRESET_LOGOS, AVAILABLE_FONTS } from '../lib/themePresets';
+import { getCardNationalTeam, getCardClubTeam, getNationalTeamFlag, POPULAR_NATIONAL_TEAMS } from '../lib/teams';
 
 interface ManageShopProps {
   cards: FootballCard[];
@@ -77,7 +78,8 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [filterTeam, setFilterTeam] = useState('');
+  const [filterClub, setFilterClub] = useState('');
+  const [filterNationalTeam, setFilterNationalTeam] = useState('');
   const [filterPosition, setFilterPosition] = useState('');
   const [filterYear, setFilterYear] = useState('');
   const [filterSet, setFilterSet] = useState('');
@@ -187,21 +189,27 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
 
   // Filter Cards
   const filteredCards = cards.filter(card => {
+    const clubName = getCardClubTeam(card) || card.team || '';
+    const nationalName = getCardNationalTeam(card) || '';
+
     const matchesSearch = 
       card.player.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.team.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      clubName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      nationalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       card.cardNumber.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesTeam = filterTeam ? card.team === filterTeam : true;
+    const matchesClub = filterClub ? clubName.toLowerCase() === filterClub.toLowerCase() : true;
+    const matchesNation = filterNationalTeam ? nationalName.toLowerCase() === filterNationalTeam.toLowerCase() : true;
     const matchesPos = filterPosition ? card.position === filterPosition : true;
     const matchesYear = filterYear ? card.year.toString() === filterYear : true;
     const matchesSet = filterSet ? card.set === filterSet : true;
     const matchesRarity = filterRarity ? card.rarity === filterRarity : true;
 
-    return matchesSearch && matchesTeam && matchesPos && matchesYear && matchesSet && matchesRarity;
+    return matchesSearch && matchesClub && matchesNation && matchesPos && matchesYear && matchesSet && matchesRarity;
   });
 
-  const teams = Array.from(new Set(cards.map(c => c.team))).sort();
+  const clubs = Array.from(new Set(cards.map(c => getCardClubTeam(c) || c.team).filter(Boolean))).sort();
+  const nationalTeams = Array.from(new Set(cards.map(c => getCardNationalTeam(c)).filter(Boolean))).sort();
   const sets = Array.from(new Set(cards.map(c => c.set))).sort();
   const rarities = ['Base', 'Silver Refractor', 'Gold Autograph', '1-of-1 Shield'];
 
@@ -210,6 +218,8 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
     setEditingCard(card);
     setEditForm({
       ...card,
+      team: getCardClubTeam(card) || card.team,
+      nationalTeam: getCardNationalTeam(card) || '',
       stock: card.stock ?? getDefaultStock(card),
       maxSupply: card.maxSupply ?? getDefaultMaxSupply(card)
     });
@@ -226,6 +236,8 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
         maxSupply: Number(editForm.maxSupply),
         player: editForm.player,
         team: editForm.team,
+        club: editForm.team,
+        nationalTeam: editForm.nationalTeam || '',
         position: editForm.position,
         rarity: editForm.rarity,
         edition: editForm.edition,
@@ -735,14 +747,23 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
             </div>
 
             {/* Filter Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-neutral-50 p-3 border-2 border-black">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 bg-neutral-50 p-3 border-2 border-black">
               <select
-                value={filterTeam}
-                onChange={(e) => setFilterTeam(e.target.value)}
+                value={filterClub}
+                onChange={(e) => setFilterClub(e.target.value)}
                 className="bg-white border-2 border-black p-1.5 text-xs font-black uppercase outline-none"
               >
-                <option value="">ALL TEAMS</option>
-                {teams.map(t => <option key={t} value={t}>{t}</option>)}
+                <option value="">🏟️ ALL CLUBS</option>
+                {clubs.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+
+              <select
+                value={filterNationalTeam}
+                onChange={(e) => setFilterNationalTeam(e.target.value)}
+                className="bg-white border-2 border-black p-1.5 text-xs font-black uppercase outline-none"
+              >
+                <option value="">🌍 ALL NATIONAL TEAMS</option>
+                {nationalTeams.map(n => <option key={n} value={n}>{getNationalTeamFlag(n)} {n}</option>)}
               </select>
 
               <select
@@ -777,7 +798,8 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
 
               <button
                 onClick={() => {
-                  setFilterTeam('');
+                  setFilterClub('');
+                  setFilterNationalTeam('');
                   setFilterPosition('');
                   setFilterYear('');
                   setFilterSet('');
@@ -796,7 +818,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                 <thead>
                   <tr className="bg-neutral-100 border-b-2 border-black text-[10px] font-black uppercase tracking-wider">
                     <th className="p-3">CARD</th>
-                    <th className="p-3">TEAM & POS</th>
+                    <th className="p-3">CLUB & NATION</th>
                     <th className="p-3">RARITY</th>
                     <th className="p-3 text-right">PRICE</th>
                     <th className="p-3 text-center">STOCK CONTROL</th>
@@ -809,6 +831,8 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                     const currentStock = card.stock ?? getDefaultStock(card);
                     const maxSupply = card.maxSupply ?? getDefaultMaxSupply(card);
                     const isOutOfStock = currentStock <= 0;
+                    const cardClub = getCardClubTeam(card) || card.team;
+                    const cardNation = getCardNationalTeam(card);
 
                     return (
                       <tr key={card.id} className={`hover:bg-neutral-50 transition-colors ${isOutOfStock ? 'bg-red-50/60' : ''}`}>
@@ -826,8 +850,14 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                           </div>
                         </td>
                         <td className="p-3 uppercase">
-                          <div>{card.team}</div>
-                          <div className="text-[10px] text-neutral-500">{card.position}</div>
+                          <div className="font-black">{cardClub || '—'}</div>
+                          {cardNation && (
+                            <div className="text-[10px] text-neutral-600 font-bold flex items-center gap-1">
+                              <span>{getNationalTeamFlag(cardNation)}</span>
+                              <span>{cardNation}</span>
+                            </div>
+                          )}
+                          <div className="text-[10px] text-neutral-400 font-mono">{card.position}</div>
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 text-[9px] font-black uppercase border border-black inline-block ${
@@ -2046,6 +2076,31 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                   onChange={handleChange}
                   className="w-full bg-neutral-50 border-2 border-black p-2"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-neutral-500 text-[10px] mb-1">CLUB TEAM</label>
+                  <input
+                    type="text"
+                    name="team"
+                    value={editForm.team || ''}
+                    onChange={handleChange}
+                    className="w-full bg-neutral-50 border-2 border-black p-2 uppercase"
+                    placeholder="e.g. REAL MADRID"
+                  />
+                </div>
+                <div>
+                  <label className="block text-neutral-500 text-[10px] mb-1">NATIONAL TEAM (COUNTRY)</label>
+                  <input
+                    type="text"
+                    name="nationalTeam"
+                    value={editForm.nationalTeam || ''}
+                    onChange={handleChange}
+                    className="w-full bg-neutral-50 border-2 border-black p-2 uppercase"
+                    placeholder="e.g. ARGENTINA"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

@@ -3,6 +3,7 @@ import { ImagePlus, Download, Sparkles, Sliders, Palette, Plus, ArrowRight } fro
 import { toPng } from 'html-to-image';
 import { db, doc, setDoc } from '../lib/firebase';
 import { DEFAULT_OFFICIAL_THEMES } from '../lib/themePresets';
+import { extractPlayerNameFromFileName } from '../lib/teams';
 
 interface CustomCardProps {
   themes: any[];
@@ -65,6 +66,14 @@ export function CustomCard({ themes, isAdmin = false, onOpenAdminThemes }: Custo
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const extractedName = extractPlayerNameFromFileName(file.name);
+      if (extractedName) {
+        setFormData(prev => ({
+          ...prev,
+          player: (!prev.player || prev.player === 'CUSTOM PLAYER') ? extractedName : prev.player
+        }));
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setImageUrl(reader.result as string);
