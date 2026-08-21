@@ -1,0 +1,76 @@
+{
+  "cards": {
+    "$cardId": {
+      "player": "string",
+      "team": "string",
+      "position": "string",
+      "year": "number",
+      "set": "string",
+      "edition": "string",
+      "rarity": "string",
+      "cardNumber": "string",
+      "imageUrl": "string",
+      "imageGradient": "string",
+      "currentPrice": "number",
+      "stock": "number",
+      "maxSupply": "number",
+      "priceHistory": [
+        {
+          "date": "string",
+          "price": "number"
+        }
+      ]
+    }
+  },
+  "users": {
+    "$userId": {
+      "email": "string",
+      "displayName": "string",
+      "photoURL": "string",
+      "customAvatar": "string",
+      "bio": "string",
+      "favoriteTeam": "string",
+      "featuredCardId": "string",
+      "joinedAt": "number",
+      "collectionIds": ["string"],
+      "vaultIds": ["string"],
+      "favoriteIds": ["string"],
+      "walletBalance": "number",
+      "followers": ["string"],
+      "following": ["string"]
+    }
+  },
+  "market_listings": {
+    "$listingId": {
+      "cardId": "string",
+      "sellerId": "string",
+      "sellerName": "string",
+      "sellerAvatar": "string",
+      "sellerTeam": "string",
+      "price": "number",
+      "status": "string",
+      "buyerId": "string",
+      "buyerName": "string",
+      "listedAt": "number",
+      "soldAt": "number"
+    }
+  },
+  "events": {
+    "$eventId": {
+      "title": "string",
+      "description": "string",
+      "reward": "number",
+      "expiresAt": "number"
+    }
+  },
+  "transactions": {
+    "$transactionId": {
+      "userId": "string",
+      "userEmail": "string",
+      "type": "string",
+      "amount": "number",
+      "description": "string",
+      "timestamp": "number"
+    }
+  }
+}

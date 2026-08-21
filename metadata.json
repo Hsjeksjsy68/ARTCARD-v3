@@ -1,0 +1,6 @@
+{
+  "name": "ARTCARD",
+  "description": "Football card collective platform featuring booster packs, custom card creation, FC Mobile style P2P marketplace with ARTCOIN currency, collector leaderboards, community events, and public user profiles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
