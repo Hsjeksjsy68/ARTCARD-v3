@@ -37,12 +37,14 @@ export function CardItem({
   const clubName = getCardClubTeam(card) || card.team;
   const nationalName = getCardNationalTeam(card);
   
-  // Format vault badge label (e.g. "VAULT", "VAULT (x3)", or "COPY #2/3")
+  // Format vault badge label (e.g. "COPY #1", "COPY #2 OF 3", or "OWNED: 2")
   let vaultBadgeLabel = "VAULT";
-  if (copyNumber && totalCopies && totalCopies > 1) {
-    vaultBadgeLabel = `COPY #${copyNumber}/${totalCopies}`;
+  if (copyNumber) {
+    vaultBadgeLabel = totalCopies && totalCopies > 1 
+      ? `COPY #${copyNumber}/${totalCopies}` 
+      : `COPY #${copyNumber}`;
   } else if (ownedCount && ownedCount > 1) {
-    vaultBadgeLabel = `VAULT (x${ownedCount})`;
+    vaultBadgeLabel = `OWNED (${ownedCount})`;
   }
   
   return (

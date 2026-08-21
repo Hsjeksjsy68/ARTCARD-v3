@@ -147,11 +147,29 @@ export function Marketplace({
     activeListingsCountMap.set(l.cardId, (activeListingsCountMap.get(l.cardId) || 0) + 1);
   });
 
-  // Available cards: user owns more copies than currently listed
-  const availableVaultCards = allCards.filter(c => {
-    const totalOwned = ownedCountMap.get(c.id) || 0;
-    const currentlyListed = activeListingsCountMap.get(c.id) || 0;
-    return totalOwned > currentlyListed;
+  // Available cards: show each individual unlisted copy from the user's vault
+  const cardMap = new Map(allCards.map(c => [c.id, c]));
+  const availableVaultCardItems: { card: FootballCard; copyNumber: number; totalOwned: number; instanceKey: string }[] = [];
+  const copyCounter = new Map<string, number>();
+  
+  userVaultArray.forEach((id, index) => {
+    const totalOwned = ownedCountMap.get(id) || 0;
+    const currentlyListed = activeListingsCountMap.get(id) || 0;
+    const curCopy = (copyCounter.get(id) || 0) + 1;
+    copyCounter.set(id, curCopy);
+
+    // If this copy is not already committed to an active listing, make it available
+    if (curCopy > currentlyListed) {
+      const c = cardMap.get(id);
+      if (c) {
+        availableVaultCardItems.push({
+          card: c,
+          copyNumber: curCopy,
+          totalOwned,
+          instanceKey: `${id}_sell_copy_${index}`
+        });
+      }
+    }
   });
 
   // Filtered browse list
@@ -437,7 +455,7 @@ export function Marketplace({
             )}
           >
             <PlusCircle size={16} />
-            SELL VAULT CARD ({availableVaultCards.length})
+            SELL VAULT CARD ({availableVaultCardItems.length})
           </button>
 
           <button
@@ -751,17 +769,18 @@ export function Marketplace({
                 </p>
               </div>
               <span className="bg-[#D4FF00] text-black border border-black px-3 py-1 text-xs font-black uppercase font-mono">
-                {availableVaultCards.length} UNLISTED CARDS
+                {availableVaultCardItems.length} UNLISTED CARDS
               </span>
             </div>
 
-            {availableVaultCards.length > 0 ? (
+            {availableVaultCardItems.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {availableVaultCards.map((card) => {
+                {availableVaultCardItems.map((item) => {
+                  const { card, copyNumber, totalOwned, instanceKey } = item;
                   const isSelected = selectedVaultCard?.id === card.id;
                   return (
                     <div
-                      key={card.id}
+                      key={instanceKey}
                       onClick={() => {
                         setSelectedVaultCard(card);
                         setSellPriceInput(card.currentPrice || 100);
@@ -773,17 +792,29 @@ export function Marketplace({
                           : "bg-white hover:bg-neutral-50"
                       )}
                     >
-                      <div className="aspect-[750/1050] bg-white border border-black overflow-hidden mb-2">
+                      <div className="aspect-[750/1050] bg-white border border-black overflow-hidden mb-2 relative">
                         <img src={card.imageUrl} alt={card.player} className="w-full h-full object-cover" />
+                        {totalOwned > 1 && (
+                          <div className="absolute top-1 right-1 bg-black text-[#D4FF00] px-1.5 py-0.5 text-[8px] font-black border border-black uppercase">
+                            COPY #{copyNumber}/{totalOwned}
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-1">
-                        <span className={cn(
-                          "text-[8px] font-black uppercase px-1 py-0.2 border",
-                          isSelected ? "bg-[#D4FF00] text-black border-black" : "bg-neutral-100 text-neutral-800 border-black/30"
-                        )}>
-                          {card.rarity}
-                        </span>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className={cn(
+                            "text-[8px] font-black uppercase px-1 py-0.2 border",
+                            isSelected ? "bg-[#D4FF00] text-black border-black" : "bg-neutral-100 text-neutral-800 border-black/30"
+                          )}>
+                            {card.rarity}
+                          </span>
+                          {totalOwned > 1 && (
+                            <span className="text-[8px] font-black text-neutral-500 uppercase">
+                              COPY #{copyNumber}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs font-black uppercase truncate">{card.player}</div>
                         <div className="text-[9px] font-bold text-neutral-400 uppercase truncate">{card.team}</div>
                         <div className="text-xs font-black text-[#D4FF00] font-mono pt-1">
