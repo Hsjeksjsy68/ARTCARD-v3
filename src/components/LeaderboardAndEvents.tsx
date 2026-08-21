@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { FootballCard, UserProfileData } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
 import { toggleFollowUser } from '../lib/social';
@@ -43,7 +43,7 @@ interface LeaderboardAndEventsProps {
   user: User | null;
   walletBalance: number;
   allCards: FootballCard[];
-  vaultIds: Set<string>;
+  vaultIds: Set<string> | string[];
   onOpenWallet: () => void;
   onOpenAuth: () => void;
   onViewUserProfile: (userId: string) => void;
@@ -198,7 +198,13 @@ export function LeaderboardAndEvents({
   const tableUsers = searchQuery.trim() || leaderboardCategory === 'following' ? sortedUsers : sortedUsers.slice(3);
 
   // User's own cards in vault
-  const userVaultCards = allCards.filter(c => vaultIds.has(c.id));
+  const userVaultSet = useMemo(() => {
+    if (vaultIds instanceof Set) return vaultIds;
+    if (Array.isArray(vaultIds)) return new Set(vaultIds);
+    return new Set<string>();
+  }, [vaultIds]);
+
+  const userVaultCards = allCards.filter(c => userVaultSet.has(c.id));
   const userTotalValue = userVaultCards.reduce((s, c) => s + (c.currentPrice || 0), 0);
   const userShieldCount = userVaultCards.filter(c => c.rarity === '1-of-1 Shield').length;
   const userUclCount = userVaultCards.filter(c => c.edition && c.edition.toLowerCase().includes('ucl')).length;
