@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { FootballCard } from '../types';
+import React, { useState, useEffect } from 'react';
+import { FootballCard, MarketListing } from '../types';
 import { PriceChart } from './PriceChart';
 import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
+import { db } from '../lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -27,7 +29,13 @@ import {
   AlertCircle,
   PackageCheck,
   Heart,
-  Trophy
+  Trophy,
+  Coins,
+  ArrowUpRight,
+  Tag,
+  Store,
+  Layers,
+  Lock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -44,9 +52,9 @@ interface CardPreviewPageProps {
   onSelectRelatedCard: (card: FootballCard) => void;
   userEmail?: string | null;
   walletBalance?: number;
-  onBuyCard?: (card: FootballCard) => void;
   onOpenWallet?: () => void;
-  isBuying?: boolean;
+  onNavigateToMarket?: (playerName?: string, tab?: 'browse' | 'sell', cardToSell?: FootballCard) => void;
+  onNavigateToShop?: () => void;
 }
 
 export function CardPreviewPage({
@@ -62,12 +70,43 @@ export function CardPreviewPage({
   onSelectRelatedCard,
   userEmail,
   walletBalance = 0,
-  onBuyCard,
   onOpenWallet,
-  isBuying = false
+  onNavigateToMarket,
+  onNavigateToShop
 }: CardPreviewPageProps) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
+  const [activeMarketListings, setActiveMarketListings] = useState<MarketListing[]>([]);
+  const [loadingMarketListings, setLoadingMarketListings] = useState(true);
+
+  // Listen to active listings for this card in real-time
+  useEffect(() => {
+    try {
+      const q = query(
+        collection(db, 'market_listings'),
+        where('status', '==', 'active')
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const matches: MarketListing[] = [];
+        snapshot.forEach(docSnap => {
+          const item = { id: docSnap.id, ...docSnap.data() } as MarketListing;
+          if (item.cardId === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) {
+            matches.push(item);
+          }
+        });
+        matches.sort((a, b) => a.price - b.price);
+        setActiveMarketListings(matches);
+        setLoadingMarketListings(false);
+      }, (err) => {
+        console.error("Error loading market listings:", err);
+        setLoadingMarketListings(false);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      console.error(e);
+      setLoadingMarketListings(false);
+    }
+  }, [card.id, card.player]);
 
   const effectiveOwnedCount = ownedCount > 0 ? ownedCount : (inVault || inCollection ? 1 : 0);
   const isOwnedInVault = effectiveOwnedCount > 0;
@@ -82,7 +121,7 @@ export function CardPreviewPage({
   const stock = getDefaultStock(card);
   const maxSupply = getDefaultMaxSupply(card);
   const isSoldOut = stock <= 0;
-  const canAfford = walletBalance >= card.currentPrice;
+  const lowestMarketPrice = activeMarketListings.length > 0 ? activeMarketListings[0].price : null;
 
   // Price analysis
   const firstPrice = card.priceHistory && card.priceHistory.length > 0 
@@ -202,59 +241,80 @@ export function CardPreviewPage({
               </span>
             </div>
 
-            {/* Direct Buy Card Button with Wallet */}
-            {onBuyCard && (
-              <div className="space-y-2">
-                <button
-                  onClick={() => {
-                    if (isSoldOut) return;
-                    if (!canAfford && onOpenWallet) {
-                      onOpenWallet();
-                    } else {
-                      onBuyCard(card);
-                    }
-                  }}
-                  disabled={isSoldOut || isBuying}
-                  className={cn(
-                    "w-full py-4 px-6 border-2 font-black text-sm tracking-widest uppercase flex items-center justify-center gap-3 transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]",
-                    isSoldOut
-                      ? "bg-neutral-200 text-neutral-500 border-neutral-400 cursor-not-allowed"
-                      : isOwnedInVault
-                      ? "bg-black text-[#D4FF00] hover:bg-neutral-900 border-black"
-                      : canAfford
-                      ? "bg-[#D4FF00] text-black border-black hover:bg-black hover:text-[#D4FF00]"
-                      : "bg-white text-black border-black hover:bg-[#D4FF00]"
-                  )}
-                >
-                  {isBuying ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                      PROCESSING PURCHASE...
-                    </div>
-                  ) : isSoldOut ? (
-                    <>
-                      <AlertCircle size={20} />
-                      OUT OF STOCK / SOLD OUT
-                    </>
-                  ) : isOwnedInVault ? (
-                    <>
-                      <PackageCheck size={20} />
-                      BUY ANOTHER COPY {effectiveOwnedCount > 1 ? `(OWNED: ${effectiveOwnedCount})` : ''} • {formatCurrency(card.currentPrice)}
-                    </>
-                  ) : canAfford ? (
-                    <>
-                      <ShoppingCart size={20} />
-                      BUY CARD TO VAULT ({formatCurrency(card.currentPrice)})
-                    </>
+            {/* Transfer Market Acquisition Section */}
+            <div className="space-y-3">
+              {/* Market Status & Direct Buy/Search CTA */}
+              <div className="bg-neutral-50 border-2 border-black p-4 space-y-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black text-neutral-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Coins size={14} className="text-black" /> P2P TRANSFER MARKET
+                  </span>
+                  {activeMarketListings.length > 0 ? (
+                    <span className="bg-[#D4FF00] text-black px-2 py-0.5 text-[10px] font-black border border-black uppercase">
+                      {activeMarketListings.length} {activeMarketListings.length === 1 ? 'LISTING' : 'LISTINGS'} AVAILABLE
+                    </span>
                   ) : (
-                    <>
-                      <Wallet size={20} />
-                      TOP UP & BUY TO VAULT ({formatCurrency(card.currentPrice)})
-                    </>
+                    <span className="bg-neutral-200 text-neutral-600 px-2 py-0.5 text-[10px] font-black border border-neutral-400 uppercase">
+                      0 ACTIVE LISTINGS
+                    </span>
                   )}
+                </div>
+
+                {lowestMarketPrice !== null ? (
+                  <div className="flex items-baseline justify-between py-1">
+                    <span className="text-xs font-black uppercase text-neutral-600">BEST ASKING PRICE:</span>
+                    <span className="text-xl font-black text-black font-mono">
+                      {formatCurrency(lowestMarketPrice, true)}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs font-bold text-neutral-500 uppercase leading-snug">
+                    No collectors currently have this card listed for sale on the transfer market.
+                  </p>
+                )}
+
+                <button
+                  onClick={() => onNavigateToMarket && onNavigateToMarket(card.player, 'browse')}
+                  className="w-full py-3.5 px-4 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black font-black text-xs uppercase tracking-widest transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2"
+                >
+                  <ShoppingCart size={16} />
+                  {activeMarketListings.length > 0
+                    ? `BUY ON TRANSFER MARKET (${formatCurrency(lowestMarketPrice!, true)})`
+                    : 'SEARCH TRANSFER MARKET'}
+                  <ArrowUpRight size={16} />
                 </button>
               </div>
-            )}
+
+              {/* Secondary Options: Pack Shop & Sell on Market */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {onNavigateToShop && (
+                  <button
+                    onClick={onNavigateToShop}
+                    className="py-3 px-3 bg-white hover:bg-black hover:text-white text-black border-2 border-black font-black text-[11px] uppercase tracking-wider transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles size={14} className="text-amber-500" />
+                    OPEN BOOSTER PACKS
+                  </button>
+                )}
+                {isOwnedInVault && onNavigateToMarket && (
+                  <button
+                    onClick={() => onNavigateToMarket(undefined, 'sell', card)}
+                    className="py-3 px-3 bg-black hover:bg-neutral-800 text-[#D4FF00] border-2 border-black font-black text-[11px] uppercase tracking-wider transition-all shadow-[3px_3px_0px_0px_#D4FF00] flex items-center justify-center gap-1.5"
+                  >
+                    <Tag size={14} />
+                    LIST FOR SALE ({effectiveOwnedCount} OWNED)
+                  </button>
+                )}
+              </div>
+
+              {/* Informative Rule Callout */}
+              <div className="p-3 bg-neutral-100 border border-black/30 text-[10px] font-bold text-neutral-600 uppercase flex items-start gap-2">
+                <AlertCircle size={14} className="shrink-0 mt-0.5 text-neutral-500" />
+                <span>
+                  <strong className="text-black">Database Policy:</strong> Cards cannot be purchased directly from the database catalog. Trade peer-to-peer on the Transfer Market or draw pulls from Booster Packs.
+                </span>
+              </div>
+            </div>
 
             {/* Owned in Vault Status Banner if user owns it */}
             {isOwnedInVault && (

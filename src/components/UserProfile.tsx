@@ -628,7 +628,7 @@ export function UserProfile({
               <Trophy size={48} className="mx-auto text-neutral-400" />
               <h3 className="text-xl font-black uppercase tracking-widest text-black">YOUR VAULT IS EMPTY</h3>
               <p className="text-xs text-neutral-500 uppercase font-black max-w-md mx-auto">
-                Cards you buy directly from the database or pull from booster packs in the shop will automatically be stored in your Vault.
+                Cards you buy on the Transfer Market or pull from booster packs in the shop will automatically be stored in your Vault.
               </p>
               <div className="pt-2 flex flex-wrap justify-center gap-3">
                 <button
@@ -638,10 +638,10 @@ export function UserProfile({
                   OPEN BOOSTER PACKS
                 </button>
                 <button
-                  onClick={() => onNavigateTab('database')}
+                  onClick={() => onNavigateTab('marketplace')}
                   className="bg-black text-[#D4FF00] hover:bg-neutral-800 border-2 border-black px-6 py-3 text-xs font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
                 >
-                  BUY FROM DATABASE
+                  BROWSE TRANSFER MARKET
                 </button>
               </div>
             </div>

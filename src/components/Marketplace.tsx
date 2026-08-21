@@ -54,6 +54,9 @@ interface MarketplaceProps {
   onSelectCard: (card: FootballCard) => void;
   onViewUserProfile: (userId: string) => void;
   onToast: (msg: string) => void;
+  initialSearchQuery?: string;
+  initialTab?: 'browse' | 'sell' | 'my-orders' | 'history';
+  initialSellCard?: FootballCard | null;
 }
 
 export function Marketplace({
@@ -65,14 +68,17 @@ export function Marketplace({
   onOpenAuth,
   onSelectCard,
   onViewUserProfile,
-  onToast
+  onToast,
+  initialSearchQuery,
+  initialTab,
+  initialSellCard
 }: MarketplaceProps) {
-  const [activeMarketTab, setActiveMarketTab] = useState<'browse' | 'sell' | 'my-orders' | 'history'>('browse');
+  const [activeMarketTab, setActiveMarketTab] = useState<'browse' | 'sell' | 'my-orders' | 'history'>(initialTab || 'browse');
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [loadingListings, setLoadingListings] = useState(true);
 
   // Filter States
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery || '');
   const [filterRarity, setFilterRarity] = useState('');
   const [filterClub, setFilterClub] = useState('');
   const [filterNationalTeam, setFilterNationalTeam] = useState('');
@@ -83,9 +89,23 @@ export function Marketplace({
   const [sortBy, setSortBy] = useState<'price-asc' | 'price-desc' | 'newest' | 'player-asc'>('newest');
 
   // Sell Card States
-  const [selectedVaultCard, setSelectedVaultCard] = useState<FootballCard | null>(null);
+  const [selectedVaultCard, setSelectedVaultCard] = useState<FootballCard | null>(initialSellCard || null);
   const [sellPriceInput, setSellPriceInput] = useState<number>(100);
   const [isListingCard, setIsListingCard] = useState(false);
+
+  // Update filters if incoming props change
+  useEffect(() => {
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery);
+    }
+    if (initialTab) {
+      setActiveMarketTab(initialTab);
+    }
+    if (initialSellCard) {
+      setSelectedVaultCard(initialSellCard);
+      setSellPriceInput(initialSellCard.currentPrice || 100);
+    }
+  }, [initialSearchQuery, initialTab, initialSellCard]);
 
   // Buy Processing
   const [isProcessingBuy, setIsProcessingBuy] = useState<string | null>(null);
@@ -793,7 +813,7 @@ export function Marketplace({
                 <Trophy size={44} className="mx-auto text-neutral-400" />
                 <h4 className="text-xl font-black uppercase tracking-tight text-black">NO UNLISTED VAULT CARDS</h4>
                 <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider max-w-md mx-auto">
-                  You don't have any unlisted cards in your Vault right now. Buy cards from the database or rip booster packs to get cards to trade!
+                  You don't have any unlisted cards in your Vault right now. Buy cards on the Transfer Market or open booster packs in the shop to get cards to trade!
                 </p>
               </div>
             )}

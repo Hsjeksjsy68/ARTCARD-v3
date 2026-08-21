@@ -75,7 +75,9 @@ export default function App() {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
-  const [isBuyingCard, setIsBuyingCard] = useState(false);
+  const [marketInitialSearch, setMarketInitialSearch] = useState<string>('');
+  const [marketInitialTab, setMarketInitialTab] = useState<'browse' | 'sell' | 'my-orders' | 'history'>('browse');
+  const [marketInitialSellCard, setMarketInitialSellCard] = useState<FootballCard | null>(null);
   const [cards, setCards] = useState<FootballCard[]>([]);
   const [loadingCards, setLoadingCards] = useState(true);
   const [packs, setPacks] = useState<Pack[]>([]);
@@ -222,66 +224,17 @@ export default function App() {
     });
   };
 
-  // Buy single card directly from database -> added to Vault
-  const handleBuyDirectCard = async (card: FootballCard) => {
-    if (!user) {
-      setToastMessage("Please sign in to purchase cards.");
-      switchTab('profile');
-      return;
+  // Navigate to Transfer Market (with search query or sell view)
+  const handleNavigateToMarket = (searchQuery?: string, tab?: 'browse' | 'sell', cardToSell?: FootballCard) => {
+    setSelectedCard(null);
+    setMarketInitialSearch(searchQuery || '');
+    setMarketInitialTab(tab || 'browse');
+    if (cardToSell) {
+      setMarketInitialSellCard(cardToSell);
+    } else {
+      setMarketInitialSellCard(null);
     }
-
-    const currentStock = getDefaultStock(card);
-    if (currentStock <= 0) {
-      setToastMessage("Sorry, this card is currently out of stock.");
-      return;
-    }
-
-    if (walletBalance < card.currentPrice) {
-      setToastMessage("Insufficient wallet balance. Please top up.");
-      setIsWalletOpen(true);
-      return;
-    }
-
-    setIsBuyingCard(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      const cardRef = doc(db, 'cards', card.id);
-
-      // 1. Deduct balance and append card copy to user's Vault
-      const nextVault = [...vaultIds, card.id];
-
-      await setDoc(userRef, {
-        email: user.email,
-        walletBalance: increment(-card.currentPrice),
-        vaultIds: nextVault,
-        collectionIds: nextVault
-      }, { merge: true });
-
-      // 2. Decrement stock from database
-      await setDoc(cardRef, {
-        stock: Math.max(0, currentStock - 1)
-      }, { merge: true });
-
-      // 3. Record transaction
-      const txRef = collection(db, 'transactions');
-      await addDoc(txRef, {
-        userId: user.uid,
-        userEmail: user.email || 'Anonymous',
-        type: 'card_purchase',
-        amount: card.currentPrice,
-        description: `Purchased card: ${card.player} (${card.rarity})`,
-        timestamp: Date.now()
-      });
-
-      const newOwnedCount = nextVault.filter(id => id === card.id).length;
-      setVaultIds(nextVault);
-      setToastMessage(`🎉 Bought copy #${newOwnedCount} of ${card.player} and saved to your Vault!`);
-    } catch (err: any) {
-      console.error("Purchase error:", err);
-      setToastMessage(`Purchase failed: ${err.message || 'Please try again.'}`);
-    } finally {
-      setIsBuyingCard(false);
-    }
+    switchTab('marketplace');
   };
 
   const handleAddCard = async (newCard: FootballCard) => {
@@ -692,9 +645,12 @@ export default function App() {
             onSelectRelatedCard={(relCard) => handleSelectCard(relCard)}
             userEmail={user?.email}
             walletBalance={walletBalance}
-            onBuyCard={handleBuyDirectCard}
             onOpenWallet={() => setIsWalletOpen(true)}
-            isBuying={isBuyingCard}
+            onNavigateToMarket={handleNavigateToMarket}
+            onNavigateToShop={() => {
+              setSelectedCard(null);
+              switchTab('shop');
+            }}
           />
         ) : activeTab === 'profile' ? (
           <UserProfile
@@ -717,6 +673,9 @@ export default function App() {
             onSelectCard={handleSelectCard}
             onViewUserProfile={handleOpenUserProfile}
             onToast={(msg) => setToastMessage(msg)}
+            initialSearchQuery={marketInitialSearch}
+            initialTab={marketInitialTab}
+            initialSellCard={marketInitialSellCard}
           />
         ) : activeTab === 'leaderboard' ? (
           <LeaderboardAndEvents
@@ -1038,7 +997,7 @@ export default function App() {
                     <h3 className="text-xl sm:text-2xl font-black text-black mb-2 uppercase tracking-widest">YOUR VAULT IS EMPTY</h3>
                     <p className="text-neutral-500 max-w-md text-xs font-black uppercase tracking-widest mb-6">
                       {user 
-                        ? "YOU HAVEN'T PURCHASED OR DRAWN ANY CARDS YET. BUY FROM THE DATABASE OR OPEN BOOSTER PACKS TO FILL YOUR VAULT." 
+                        ? "YOU HAVEN'T ACQUIRED ANY CARDS YET. BUY FROM OTHER COLLECTORS ON THE TRANSFER MARKET OR OPEN BOOSTER PACKS TO FILL YOUR VAULT." 
                         : "PLEASE SIGN IN TO VIEW YOUR CARD VAULT."}
                     </p>
                     <div className="flex flex-wrap justify-center gap-3">
@@ -1049,10 +1008,10 @@ export default function App() {
                         OPEN PACKS
                       </button>
                       <button
-                        onClick={() => switchTab('database')}
+                        onClick={() => switchTab('marketplace')}
                         className="bg-black text-[#D4FF00] border-2 border-black px-5 py-2.5 font-black text-xs uppercase tracking-widest hover:bg-neutral-800 shadow-[3px_3px_0px_0px_#D4FF00]"
                       >
-                        BROWSE DATABASE
+                        TRANSFER MARKET
                       </button>
                     </div>
                   </>
