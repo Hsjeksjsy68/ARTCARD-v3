@@ -6,10 +6,10 @@
 /* Global Left-Right (Horizontal) and Up-Down (Vertical) Scrollbar Styling */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #16a34a #ffffff;
+  scrollbar-color: #D4FF00 #ffffff;
 }
 
-/* Chrome, Edge, Safari, Opera scrollbar */
+/* Chrome, Edge, Safari, Opera scrollbars - Light & White Body Theme */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -18,72 +18,219 @@
 
 ::-webkit-scrollbar-track {
   background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 1.5px solid #000000;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #16a34a;
-  border-radius: 6px;
-  border: 2px solid #ffffff;
+  background-color: #D4FF00;
+  border: 1.5px solid #000000;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #15803d;
+  background-color: #b8e600;
 }
 
 ::-webkit-scrollbar-corner {
   background: #ffffff;
 }
 
-/* Global Left-Right & Up-Down Range Slider Styling */
-input[type="range"] {
-  accent-color: #16a34a;
+/* Dark / Black Body Container Scrollbars */
+body.bg-black::-webkit-scrollbar,
+body.dark::-webkit-scrollbar,
+.bg-black::-webkit-scrollbar,
+.bg-neutral-900::-webkit-scrollbar,
+.bg-neutral-950::-webkit-scrollbar,
+.bg-neutral-800::-webkit-scrollbar,
+[data-theme="dark"]::-webkit-scrollbar,
+.dark::-webkit-scrollbar,
+body.bg-black *::-webkit-scrollbar,
+body.dark *::-webkit-scrollbar,
+.bg-black *::-webkit-scrollbar,
+.bg-neutral-900 *::-webkit-scrollbar,
+.bg-neutral-950 *::-webkit-scrollbar,
+.bg-neutral-800 *::-webkit-scrollbar {
+  background-color: #000000;
+}
+
+body.bg-black::-webkit-scrollbar-track,
+body.dark::-webkit-scrollbar-track,
+.bg-black::-webkit-scrollbar-track,
+.bg-neutral-900::-webkit-scrollbar-track,
+.bg-neutral-950::-webkit-scrollbar-track,
+.bg-neutral-800::-webkit-scrollbar-track,
+[data-theme="dark"]::-webkit-scrollbar-track,
+.dark::-webkit-scrollbar-track,
+body.bg-black *::-webkit-scrollbar-track,
+body.dark *::-webkit-scrollbar-track,
+.bg-black *::-webkit-scrollbar-track,
+.bg-neutral-900 *::-webkit-scrollbar-track,
+.bg-neutral-950 *::-webkit-scrollbar-track,
+.bg-neutral-800 *::-webkit-scrollbar-track {
+  background: #000000;
+  border: 1.5px solid #333333;
+}
+
+body.bg-black::-webkit-scrollbar-thumb,
+body.dark::-webkit-scrollbar-thumb,
+.bg-black::-webkit-scrollbar-thumb,
+.bg-neutral-900::-webkit-scrollbar-thumb,
+.bg-neutral-950::-webkit-scrollbar-thumb,
+.bg-neutral-800::-webkit-scrollbar-thumb,
+[data-theme="dark"]::-webkit-scrollbar-thumb,
+.dark::-webkit-scrollbar-thumb,
+body.bg-black *::-webkit-scrollbar-thumb,
+body.dark *::-webkit-scrollbar-thumb,
+.bg-black *::-webkit-scrollbar-thumb,
+.bg-neutral-900 *::-webkit-scrollbar-thumb,
+.bg-neutral-950 *::-webkit-scrollbar-thumb,
+.bg-neutral-800 *::-webkit-scrollbar-thumb {
+  background-color: #D4FF00;
+  border: 1.5px solid #000000;
+}
+
+body.bg-black::-webkit-scrollbar-thumb:hover,
+body.dark::-webkit-scrollbar-thumb:hover,
+.bg-black::-webkit-scrollbar-thumb:hover,
+.bg-neutral-900::-webkit-scrollbar-thumb:hover,
+.bg-neutral-950::-webkit-scrollbar-thumb:hover,
+.bg-neutral-800::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"]::-webkit-scrollbar-thumb:hover,
+.dark::-webkit-scrollbar-thumb:hover,
+body.bg-black *::-webkit-scrollbar-thumb:hover,
+body.dark *::-webkit-scrollbar-thumb:hover,
+.bg-black *::-webkit-scrollbar-thumb:hover,
+.bg-neutral-900 *::-webkit-scrollbar-thumb:hover,
+.bg-neutral-950 *::-webkit-scrollbar-thumb:hover,
+.bg-neutral-800 *::-webkit-scrollbar-thumb:hover {
   background-color: #ffffff;
 }
 
+/* ==========================================================================
+   Global Left-Right & Up-Down Range Slider Styling (Theme-Adaptive)
+   ========================================================================== */
+input[type="range"] {
+  accent-color: #D4FF00;
+  background-color: transparent !important;
+  cursor: pointer;
+}
+
+/* Light / White Body Slider Track & Thumb (Default) */
 input[type="range"]::-webkit-slider-runnable-track {
   background: #ffffff;
-  border: 1.5px solid #000000;
-  border-radius: 9999px;
-  height: 10px;
+  border: 2px solid #000000;
+  border-radius: 4px;
+  height: 12px;
+  box-shadow: 2px 2px 0px #000000;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  height: 20px;
-  width: 20px;
-  background-color: #16a34a;
+  height: 22px;
+  width: 22px;
+  background-color: #D4FF00;
   border: 2px solid #000000;
-  border-radius: 9999px;
+  border-radius: 4px;
   margin-top: -6px;
   cursor: pointer;
   transition: transform 0.1s ease, background-color 0.15s ease;
-  box-shadow: 1px 1px 0px #000000;
+  box-shadow: 2px 2px 0px #000000;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  background-color: #15803d;
+  background-color: #b8e600;
+  transform: scale(1.1);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  background-color: #000000;
+  border-color: #D4FF00;
   transform: scale(1.15);
 }
 
 input[type="range"]::-moz-range-track {
   background: #ffffff;
-  border: 1.5px solid #000000;
-  border-radius: 9999px;
-  height: 10px;
+  border: 2px solid #000000;
+  border-radius: 4px;
+  height: 12px;
+  box-shadow: 2px 2px 0px #000000;
 }
 
 input[type="range"]::-moz-range-thumb {
-  height: 20px;
-  width: 20px;
-  background-color: #16a34a;
+  height: 22px;
+  width: 22px;
+  background-color: #D4FF00;
   border: 2px solid #000000;
-  border-radius: 9999px;
+  border-radius: 4px;
   cursor: pointer;
-  box-shadow: 1px 1px 0px #000000;
+  box-shadow: 2px 2px 0px #000000;
+  transition: transform 0.1s ease, background-color 0.15s ease;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
-  background-color: #15803d;
+  background-color: #b8e600;
+  transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-thumb:active {
+  background-color: #000000;
+  border-color: #D4FF00;
+  transform: scale(1.15);
+}
+
+/* ==========================================================================
+   Dark / Black Body Slider Track & Thumb (Black BG + Neon Green Accents)
+   ========================================================================== */
+body.bg-black input[type="range"]::-webkit-slider-runnable-track,
+body.dark input[type="range"]::-webkit-slider-runnable-track,
+.bg-black input[type="range"]::-webkit-slider-runnable-track,
+.bg-neutral-900 input[type="range"]::-webkit-slider-runnable-track,
+.bg-neutral-950 input[type="range"]::-webkit-slider-runnable-track,
+.bg-neutral-800 input[type="range"]::-webkit-slider-runnable-track,
+[data-theme="dark"] input[type="range"]::-webkit-slider-runnable-track,
+.dark input[type="range"]::-webkit-slider-runnable-track {
+  background: #000000;
+  border: 2px solid #D4FF00;
+  box-shadow: 2px 2px 0px rgba(212, 255, 0, 0.4);
+}
+
+body.bg-black input[type="range"]::-moz-range-track,
+body.dark input[type="range"]::-moz-range-track,
+.bg-black input[type="range"]::-moz-range-track,
+.bg-neutral-900 input[type="range"]::-moz-range-track,
+.bg-neutral-950 input[type="range"]::-moz-range-track,
+.bg-neutral-800 input[type="range"]::-moz-range-track,
+[data-theme="dark"] input[type="range"]::-moz-range-track,
+.dark input[type="range"]::-moz-range-track {
+  background: #000000;
+  border: 2px solid #D4FF00;
+  box-shadow: 2px 2px 0px rgba(212, 255, 0, 0.4);
+}
+
+body.bg-black input[type="range"]::-webkit-slider-thumb,
+body.dark input[type="range"]::-webkit-slider-thumb,
+.bg-black input[type="range"]::-webkit-slider-thumb,
+.bg-neutral-900 input[type="range"]::-webkit-slider-thumb,
+.bg-neutral-950 input[type="range"]::-webkit-slider-thumb,
+.bg-neutral-800 input[type="range"]::-webkit-slider-thumb,
+[data-theme="dark"] input[type="range"]::-webkit-slider-thumb,
+.dark input[type="range"]::-webkit-slider-thumb {
+  background-color: #D4FF00;
+  border: 2px solid #ffffff;
+  box-shadow: 2px 2px 0px #000000, 0 0 6px rgba(212, 255, 0, 0.5);
+}
+
+body.bg-black input[type="range"]::-moz-range-thumb,
+body.dark input[type="range"]::-moz-range-thumb,
+.bg-black input[type="range"]::-moz-range-thumb,
+.bg-neutral-900 input[type="range"]::-moz-range-thumb,
+.bg-neutral-950 input[type="range"]::-moz-range-thumb,
+.bg-neutral-800 input[type="range"]::-moz-range-thumb,
+[data-theme="dark"] input[type="range"]::-moz-range-thumb,
+.dark input[type="range"]::-moz-range-thumb {
+  background-color: #D4FF00;
+  border: 2px solid #ffffff;
+  box-shadow: 2px 2px 0px #000000, 0 0 6px rgba(212, 255, 0, 0.5);
 }

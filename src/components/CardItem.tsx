@@ -57,11 +57,11 @@ export function CardItem({
       {/* Card Body */}
       <div className={cn(
         "relative aspect-[750/1050] bg-white rounded-none border-2 border-black overflow-hidden flex flex-col transition-colors group-hover:border-[#D4FF00]",
-        isSoldOut && "opacity-85 grayscale-[30%]"
+        !isOwnedInVault && isSoldOut && "opacity-85 grayscale-[30%]"
       )}>
         
         {/* Holographic Overlay Effect */}
-        {isHolo && !isSoldOut && (
+        {isHolo && (!isSoldOut || isOwnedInVault) && (
           <div className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-[linear-gradient(105deg,transparent_20%,rgba(212,255,0,0.1)_25%,transparent_30%)] transition-opacity duration-700 ease-out z-20 pointer-events-none" />
         )}
 
@@ -105,25 +105,27 @@ export function CardItem({
           )}
         </div>
 
-        {/* Stock / Limited Edition Badge */}
-        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-30 flex flex-col gap-1">
-          {isSoldOut ? (
-            <div className="bg-red-600 text-white border border-black px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-              SOLD OUT
-            </div>
-          ) : card.rarity === '1-of-1 Shield' ? (
-            <div className="bg-black text-[#D4FF00] border border-[#D4FF00] px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_#D4FF00]">
-              1 OF 1 ONLY
-            </div>
-          ) : (
-            <div className={cn(
-              "border border-black px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
-              stock <= 3 ? "bg-amber-400 text-black animate-pulse" : "bg-white/95 text-black"
-            )}>
-              {stock} / {maxSupply} LEFT
-            </div>
-          )}
-        </div>
+        {/* Stock / Limited Edition Badge (Hidden in Vault) */}
+        {!isOwnedInVault && (
+          <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-30 flex flex-col gap-1">
+            {isSoldOut ? (
+              <div className="bg-red-600 text-white border border-black px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                SOLD OUT
+              </div>
+            ) : card.rarity === '1-of-1 Shield' ? (
+              <div className="bg-black text-[#D4FF00] border border-[#D4FF00] px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_#D4FF00]">
+                1 OF 1 ONLY
+              </div>
+            ) : (
+              <div className={cn(
+                "border border-black px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
+                stock <= 3 ? "bg-amber-400 text-black animate-pulse" : "bg-white/95 text-black"
+              )}>
+                {stock} / {maxSupply} LEFT
+              </div>
+            )}
+          </div>
+        )}
 
         {card.imageUrl ? (
           <img src={card.imageUrl} alt={card.player} className="absolute inset-0 w-full h-full object-cover z-10" />
@@ -169,7 +171,7 @@ export function CardItem({
         <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-neutral-500">{card.cardNumber}</span>
         <span className={cn(
           "text-xs sm:text-sm font-black transition-colors",
-          isSoldOut ? "text-neutral-400 line-through" : "text-black group-hover:text-neutral-700"
+          !isOwnedInVault && isSoldOut ? "text-neutral-400 line-through" : "text-black group-hover:text-neutral-700"
         )}>
           {formatCurrency(card.currentPrice)}
         </span>

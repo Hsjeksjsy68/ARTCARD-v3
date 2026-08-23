@@ -445,34 +445,40 @@ export function CardPreviewPage({
                 </div>
               </div>
               <div className="bg-neutral-50 border-2 border-black p-3">
-                <div className="text-[9px] font-black uppercase text-neutral-500">SUPPLY LIMIT</div>
+                <div className="text-[9px] font-black uppercase text-neutral-500">
+                  {isOwnedInVault ? 'VAULT STATUS' : 'SUPPLY LIMIT'}
+                </div>
                 <div className={cn(
                   "text-sm font-black truncate",
-                  isSoldOut ? "text-red-600" : "text-black"
+                  !isOwnedInVault && isSoldOut ? "text-red-600" : "text-black"
                 )}>
-                  {isSoldOut ? 'SOLD OUT' : `${stock} / ${maxSupply} LEFT`}
+                  {isOwnedInVault 
+                    ? `OWNED (${effectiveOwnedCount} ${effectiveOwnedCount === 1 ? 'COPY' : 'COPIES'})` 
+                    : (isSoldOut ? 'SOLD OUT' : `${stock} / ${maxSupply} LEFT`)}
                 </div>
               </div>
             </div>
 
-            {/* Supply Limitation Status Bar */}
-            <div className="bg-neutral-100 border-2 border-black p-4 space-y-2">
-              <div className="flex items-center justify-between text-xs font-black uppercase">
-                <span>ONLINE CARD SUPPLY & AVAILABILITY</span>
-                <span className={isSoldOut ? 'text-red-600' : 'text-emerald-700'}>
-                  {isSoldOut ? '0 COPIES REMAINING' : `${stock} OF ${maxSupply} AVAILABLE`}
-                </span>
+            {/* Supply Limitation Status Bar (Hidden if Owned in Vault) */}
+            {!isOwnedInVault && (
+              <div className="bg-neutral-100 border-2 border-black p-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-black uppercase">
+                  <span>ONLINE CARD SUPPLY & AVAILABILITY</span>
+                  <span className={isSoldOut ? 'text-red-600' : 'text-emerald-700'}>
+                    {isSoldOut ? '0 COPIES REMAINING' : `${stock} OF ${maxSupply} AVAILABLE`}
+                  </span>
+                </div>
+                <div className="w-full h-3 bg-neutral-300 border border-black overflow-hidden">
+                  <div 
+                    className={cn(
+                      "h-full transition-all duration-500",
+                      isSoldOut ? "bg-red-500 w-0" : "bg-[#D4FF00]"
+                    )}
+                    style={{ width: `${Math.min(100, Math.max(5, (stock / maxSupply) * 100))}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full h-3 bg-neutral-300 border border-black overflow-hidden">
-                <div 
-                  className={cn(
-                    "h-full transition-all duration-500",
-                    isSoldOut ? "bg-red-500 w-0" : "bg-[#D4FF00]"
-                  )}
-                  style={{ width: `${Math.min(100, Math.max(5, (stock / maxSupply) * 100))}%` }}
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Market Valuation & Performance Card */}
@@ -543,7 +549,11 @@ export function CardPreviewPage({
 
             {/* Price Chart */}
             <div className="pt-4">
-              <PriceChart data={card.priceHistory || []} />
+              <PriceChart
+                data={card.priceHistory || []}
+                currentPrice={card.currentPrice}
+                startingPrice={getCardStartingPrice(card)}
+              />
             </div>
 
           </div>

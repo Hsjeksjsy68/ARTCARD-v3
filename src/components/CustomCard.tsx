@@ -293,7 +293,7 @@ export function CustomCard({ themes, isAdmin = false, onOpenAdminThemes }: Custo
                       <label className="text-[10px] font-black uppercase text-neutral-500">ZOOM</label>
                       <span className="text-xs font-mono font-black">{imageScale.toFixed(2)}x</span>
                     </div>
-                    <input type="range" min="0.5" max="3" step="0.05" value={imageScale} onChange={e => setImageScale(Number(e.target.value))} className="w-full accent-emerald-600 bg-white cursor-pointer" />
+                    <input type="range" min="0.5" max="3" step="0.05" value={imageScale} onChange={e => setImageScale(Number(e.target.value))} className="w-full accent-[#D4FF00] cursor-pointer" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -301,14 +301,14 @@ export function CustomCard({ themes, isAdmin = false, onOpenAdminThemes }: Custo
                         <label className="text-[10px] font-black uppercase text-neutral-500">HORIZONTAL (LEFT-RIGHT)</label>
                         <span className="text-xs font-mono font-black">{imageOffsetX}px</span>
                       </div>
-                      <input type="range" min="-300" max="300" value={imageOffsetX} onChange={e => setImageOffsetX(Number(e.target.value))} className="w-full accent-emerald-600 bg-white cursor-pointer" />
+                      <input type="range" min="-300" max="300" value={imageOffsetX} onChange={e => setImageOffsetX(Number(e.target.value))} className="w-full accent-[#D4FF00] cursor-pointer" />
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[10px] font-black uppercase text-neutral-500">VERTICAL (UP-DOWN)</label>
                         <span className="text-xs font-mono font-black">{imageOffsetY}px</span>
                       </div>
-                      <input type="range" min="-300" max="300" value={imageOffsetY} onChange={e => setImageOffsetY(Number(e.target.value))} className="w-full accent-emerald-600 bg-white cursor-pointer" />
+                      <input type="range" min="-300" max="300" value={imageOffsetY} onChange={e => setImageOffsetY(Number(e.target.value))} className="w-full accent-[#D4FF00] cursor-pointer" />
                     </div>
                   </div>
                 </div>

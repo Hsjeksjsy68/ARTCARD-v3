@@ -1611,7 +1611,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="40"
                         value={themeEditForm.clubLogoTop ?? 6}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, clubLogoTop: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                     <div>
@@ -1625,7 +1625,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="50"
                         value={themeEditForm.clubLogoLeft ?? 6}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, clubLogoLeft: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                     <div>
@@ -1639,7 +1639,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="140"
                         value={themeEditForm.clubLogoSize ?? 75}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, clubLogoSize: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                   </div>
@@ -1696,7 +1696,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="40"
                         value={themeEditForm.editionLogoTop ?? 6}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, editionLogoTop: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                     <div>
@@ -1710,7 +1710,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="95"
                         value={themeEditForm.editionLogoLeft ?? 80}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, editionLogoLeft: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                     <div>
@@ -1724,7 +1724,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="140"
                         value={themeEditForm.editionLogoSize ?? 75}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, editionLogoSize: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                   </div>
@@ -1814,7 +1814,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         max="52"
                         value={themeEditForm.fontSize ?? 28}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, fontSize: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
 
@@ -1830,7 +1830,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         step="0.5"
                         value={themeEditForm.fontPositionBottom ?? 6.5}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, fontPositionBottom: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
 
@@ -1846,7 +1846,7 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
                         step="0.05"
                         value={themeEditForm.fontScaleX ?? 1}
                         onChange={(e) => setThemeEditForm(prev => ({ ...prev, fontScaleX: Number(e.target.value), fontScaleY: Number(e.target.value) }))}
-                        className="w-full accent-emerald-600 bg-white cursor-pointer"
+                        className="w-full accent-[#D4FF00] cursor-pointer"
                       />
                     </div>
                   </div>
