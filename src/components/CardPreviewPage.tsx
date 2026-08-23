@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FootballCard, MarketListing } from '../types';
 import { PriceChart } from './PriceChart';
-import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice } from '../lib/utils';
+import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice, getCardDirectUrl } from '../lib/utils';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -36,7 +36,9 @@ import {
   Store,
   Layers,
   Lock,
-  Calculator
+  Calculator,
+  Copy,
+  Link2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -76,9 +78,13 @@ export function CardPreviewPage({
   onNavigateToShop
 }: CardPreviewPageProps) {
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedDirect, setCopiedDirect] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
   const [activeMarketListings, setActiveMarketListings] = useState<MarketListing[]>([]);
   const [loadingMarketListings, setLoadingMarketListings] = useState(true);
+
+  // Generate canonical direct URL for this single card page based on card number
+  const directCardUrl = getCardDirectUrl(card);
 
   // Listen to active listings for this card in real-time
   useEffect(() => {
@@ -144,9 +150,15 @@ export function CardPreviewPage({
     .slice(0, 4);
 
   const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
+    navigator.clipboard.writeText(directCardUrl || window.location.href);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const handleCopyDirectLink = () => {
+    navigator.clipboard.writeText(directCardUrl || window.location.href);
+    setCopiedDirect(true);
+    setTimeout(() => setCopiedDirect(false), 2500);
   };
 
   return (
@@ -378,6 +390,36 @@ export function CardPreviewPage({
               </p>
             </div>
 
+            {/* Direct Single Card Page Link Banner */}
+            <div className="bg-neutral-900 text-white border-2 border-black p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex items-center gap-2.5 overflow-hidden max-w-full">
+                <span className="bg-[#D4FF00] text-black px-2 py-0.5 text-[10px] font-black uppercase tracking-wider shrink-0 flex items-center gap-1">
+                  <Link2 size={12} /> CARD LINK
+                </span>
+                <span className="text-[#D4FF00] font-mono text-xs font-bold truncate">
+                  #card-{card.cardNumber}
+                </span>
+                <span className="text-neutral-400 text-[10px] hidden md:inline font-mono truncate">
+                  ({directCardUrl})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyDirectLink}
+                className="w-full sm:w-auto bg-white hover:bg-[#D4FF00] text-black px-3.5 py-1.5 text-xs font-black uppercase tracking-wider border border-black transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                {copiedDirect ? (
+                  <>
+                    <CheckCircle2 size={14} className="text-emerald-700" /> COPIED LINK!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} /> COPY DIRECT LINK
+                  </>
+                )}
+              </button>
+            </div>
+
             {/* Quick Spec Matrix */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
               <div className="bg-neutral-50 border-2 border-black p-3">
@@ -388,9 +430,19 @@ export function CardPreviewPage({
                 <div className="text-[9px] font-black uppercase text-neutral-500">SET</div>
                 <div className="text-sm font-black text-black truncate">{card.set}</div>
               </div>
-              <div className="bg-neutral-50 border-2 border-black p-3">
-                <div className="text-[9px] font-black uppercase text-neutral-500">CARD NUMBER</div>
-                <div className="text-sm font-black text-black">#{card.cardNumber}</div>
+              <div 
+                onClick={handleCopyDirectLink}
+                title="Click to copy single card page link by card number"
+                className="bg-neutral-50 hover:bg-[#D4FF00]/20 border-2 border-black p-3 cursor-pointer transition-colors group/cardno relative"
+              >
+                <div className="flex items-center justify-between text-[9px] font-black uppercase text-neutral-500">
+                  <span>CARD NUMBER</span>
+                  <Copy size={10} className="text-neutral-400 group-hover/cardno:text-black" />
+                </div>
+                <div className="text-sm font-black text-black flex items-center gap-1">
+                  <span>#{card.cardNumber}</span>
+                  {copiedDirect && <span className="text-[9px] text-emerald-600 font-bold ml-1">COPIED</span>}
+                </div>
               </div>
               <div className="bg-neutral-50 border-2 border-black p-3">
                 <div className="text-[9px] font-black uppercase text-neutral-500">SUPPLY LIMIT</div>

@@ -43,7 +43,7 @@ import { Marketplace } from './components/Marketplace';
 import { LeaderboardAndEvents } from './components/LeaderboardAndEvents';
 import { PublicProfileModal } from './components/PublicProfileModal';
 import { FootballCard, Pack, MarketListing } from './types';
-import { formatCurrency, getDefaultStock, calculateCardMarketPrice } from './lib/utils';
+import { formatCurrency, getDefaultStock, calculateCardMarketPrice, findCardByNumberOrId, getCardNumberSlug, getCardDirectUrl } from './lib/utils';
 import { db, auth, onAuthStateChanged, collection, doc, setDoc, getDoc, User, deleteDoc, onSnapshot, getDocs, increment, updateDoc, addDoc } from './lib/firebase';
 
 export default function App() {
@@ -263,25 +263,69 @@ export default function App() {
     }
   };
 
+  // Handle URL hash and query routing for tabs, user profiles, and single card page links by card number
   useEffect(() => {
-    const handleHash = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash.startsWith('user-')) {
-        const uid = hash.replace('user-', '');
+    const handleUrlRouting = () => {
+      // 1. Check URL search parameters (e.g. ?card=001 or ?cardNumber=001)
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryCard = urlParams.get('card') || urlParams.get('cardNumber') || urlParams.get('c');
+      
+      const rawHash = window.location.hash.replace(/^#/, '');
+
+      if (queryCard) {
+        const found = findCardByNumberOrId(cards, queryCard);
+        if (found) {
+          setSelectedCard(found);
+          return;
+        }
+      }
+
+      if (rawHash.startsWith('user-')) {
+        const uid = rawHash.replace('user-', '');
         if (uid) setViewingUserId(uid);
-      } else if (['database', 'marketplace', 'vault', 'leaderboard', 'shop', 'custom', 'favorites', 'profile', 'admin', 'manage'].includes(hash)) {
-        setActiveTab(hash as any);
         setSelectedCard(null);
+      } else if (rawHash.startsWith('card-') || rawHash.startsWith('card/') || rawHash.startsWith('card_')) {
+        const cardIdentifier = rawHash.replace(/^card[-/_]/, '');
+        if (cardIdentifier) {
+          const found = findCardByNumberOrId(cards, cardIdentifier);
+          if (found) {
+            setSelectedCard(found);
+          }
+        }
+      } else if (['database', 'marketplace', 'vault', 'leaderboard', 'shop', 'custom', 'favorites', 'profile', 'admin', 'manage'].includes(rawHash)) {
+        setActiveTab(rawHash as any);
+        setSelectedCard(null);
+      } else if (rawHash) {
+        // Direct card number support in hash e.g. '#001', '#077'
+        const found = findCardByNumberOrId(cards, rawHash);
+        if (found) {
+          setSelectedCard(found);
+        }
       }
     };
 
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, []);
+    handleUrlRouting();
+    window.addEventListener('hashchange', handleUrlRouting);
+    window.addEventListener('popstate', handleUrlRouting);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlRouting);
+      window.removeEventListener('popstate', handleUrlRouting);
+    };
+  }, [cards]);
 
   const handleSelectCard = (card: FootballCard) => {
     setSelectedCard(card);
+    const slug = getCardNumberSlug(card);
+    if (slug) {
+      window.location.hash = `#card-${slug}`;
+    }
+  };
+
+  const handleCloseCardPreview = () => {
+    setSelectedCard(null);
+    if (window.location.hash.startsWith('#card-') || window.location.hash.startsWith('#card/') || window.location.hash.startsWith('#card_')) {
+      window.location.hash = `#${activeTab}`;
+    }
   };
 
   const switchTab = (tab: 'database' | 'vault' | 'favorites' | 'marketplace' | 'leaderboard' | 'admin' | 'manage' | 'shop' | 'custom' | 'profile' | 'collection') => {
@@ -663,7 +707,7 @@ export default function App() {
             ownedCount={getOwnedCount(selectedCard.id)}
             isFavorite={favoriteIds.has(selectedCard.id)}
             onToggleFavorite={() => handleToggleFavorite(selectedCard.id)}
-            onBack={() => setSelectedCard(null)}
+            onBack={handleCloseCardPreview}
             onSelectRelatedCard={(relCard) => handleSelectCard(relCard)}
             userEmail={user?.email}
             walletBalance={walletBalance}

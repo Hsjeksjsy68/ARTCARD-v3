@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FootballCard, MarketListing, MarketOffer, UserProfileData } from '../types';
-import { formatCurrency, cn, getDefaultStock, calculateCardMarketPrice, getCardStartingPrice } from '../lib/utils';
+import { formatCurrency, cn, getDefaultStock, calculateCardMarketPrice, getCardStartingPrice, updateCardMarketValueOnSale } from '../lib/utils';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { 
   db, 
@@ -487,7 +487,10 @@ export function Marketplace({
         timestamp: Date.now()
       });
 
-      onToast(`🎉 SUCCESS! Purchased ${listing.card.player} for ${formatCurrency(listing.price)}! It is now in your Vault.`);
+      // 5. Update Card Market Value & Price History in Firestore
+      await updateCardMarketValueOnSale(listing.cardId, listing.price, listing.card);
+
+      onToast(`🎉 SUCCESS! Purchased ${listing.card.player} for ${formatCurrency(listing.price)}! Market value updated.`);
     } catch (err: any) {
       console.error("Market buy error:", err);
       alert(`Transaction failed: ${err.message || 'Please try again.'}`);
@@ -668,7 +671,10 @@ export function Marketplace({
         timestamp: Date.now()
       });
 
-      onToast(`🎉 Bargain Accepted! Sold ${offer.card.player} to @${offer.buyerName} for ${formatCurrency(offer.offerAmount)}!`);
+      // 8. Update Card Market Value & Price History in Firestore
+      await updateCardMarketValueOnSale(offer.cardId, offer.offerAmount, offer.card);
+
+      onToast(`🎉 Bargain Accepted! Sold ${offer.card.player} to @${offer.buyerName} for ${formatCurrency(offer.offerAmount)}! Market value updated.`);
     } catch (err: any) {
       console.error("Accept offer error:", err);
       alert(`Failed to accept offer: ${err.message || 'Please try again.'}`);
@@ -811,7 +817,10 @@ export function Marketplace({
         timestamp: Date.now()
       });
 
-      onToast(`🎉 Counter offer accepted! Purchased ${offer.card.player} for ${formatCurrency(offer.counterAmount)}!`);
+      // 6. Update Card Market Value & Price History in Firestore
+      await updateCardMarketValueOnSale(offer.cardId, offer.counterAmount, offer.card);
+
+      onToast(`🎉 Counter offer accepted! Purchased ${offer.card.player} for ${formatCurrency(offer.counterAmount)}! Market value updated.`);
     } catch (err: any) {
       console.error("Accept counter error:", err);
       alert(`Transaction failed: ${err.message || 'Please try again.'}`);

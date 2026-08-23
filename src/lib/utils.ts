@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { FootballCard, MarketListing, Rarity } from '../types';
+import { FootballCard, MarketListing, PricePoint, Rarity } from '../types';
+import { db, doc, getDoc, setDoc, updateDoc, increment } from './firebase';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -10,6 +11,68 @@ export function formatCurrency(value: number, short = false) {
   const rounded = Math.round(Number(value || 0)).toLocaleString('en-US');
   if (short) return `${rounded} AC`;
   return `${rounded} ARTCOIN`;
+}
+
+/**
+ * Update card's market value, last sale price, and price history in Firestore after a purchase/sale.
+ */
+export async function updateCardMarketValueOnSale(
+  cardId: string,
+  salePrice: number,
+  cardFallback?: Partial<FootballCard>
+): Promise<number> {
+  if (!cardId) return Math.round(salePrice || 100);
+  
+  const roundedPrice = Math.max(1, Math.round(salePrice));
+  const nowIso = new Date().toISOString();
+  const newPricePoint: PricePoint = {
+    date: nowIso,
+    price: roundedPrice
+  };
+
+  try {
+    const cardRef = doc(db, 'cards', cardId);
+    const cardSnap = await getDoc(cardRef);
+
+    if (cardSnap.exists()) {
+      const data = cardSnap.data() as FootballCard;
+      const prevHistory = Array.isArray(data.priceHistory) && data.priceHistory.length > 0
+        ? data.priceHistory
+        : (cardFallback?.priceHistory || [{ date: new Date(Date.now() - 86400000).toISOString(), price: getCardStartingPrice(data) }]);
+
+      const updatedHistory = [...prevHistory, newPricePoint];
+      // Keep up to last 40 price history points
+      const trimmedHistory = updatedHistory.length > 40 ? updatedHistory.slice(updatedHistory.length - 40) : updatedHistory;
+
+      await updateDoc(cardRef, {
+        currentPrice: roundedPrice,
+        priceHistory: trimmedHistory,
+        lastSalePrice: roundedPrice,
+        lastSoldAt: Date.now()
+      });
+    } else if (cardFallback) {
+      const prevHistory = Array.isArray(cardFallback.priceHistory) && cardFallback.priceHistory.length > 0
+        ? cardFallback.priceHistory
+        : [{ date: new Date(Date.now() - 86400000).toISOString(), price: getCardStartingPrice(cardFallback) }];
+
+      const updatedHistory = [...prevHistory, newPricePoint];
+      const trimmedHistory = updatedHistory.length > 40 ? updatedHistory.slice(updatedHistory.length - 40) : updatedHistory;
+
+      const { id: _, ...cardDataWithoutId } = cardFallback as FootballCard;
+
+      await setDoc(cardRef, {
+        ...cardDataWithoutId,
+        currentPrice: roundedPrice,
+        priceHistory: trimmedHistory,
+        lastSalePrice: roundedPrice,
+        lastSoldAt: Date.now()
+      }, { merge: true });
+    }
+  } catch (err) {
+    console.error("Failed to update card market value on sale:", err);
+  }
+
+  return roundedPrice;
 }
 
 /**
@@ -126,4 +189,77 @@ export function drawRandomCards(
   }
 
   return drawn;
+}
+
+/**
+ * Format clean URL slug or hash target for card by card number
+ */
+export function getCardNumberSlug(card: Partial<FootballCard>): string {
+  if (!card) return '';
+  const num = (card.cardNumber || card.id || '').trim();
+  return encodeURIComponent(num);
+}
+
+/**
+ * Generate shareable direct link to a single card page by card number
+ */
+export function getCardDirectUrl(card: Partial<FootballCard>): string {
+  if (!card) return typeof window !== 'undefined' ? window.location.href : '';
+  const slug = getCardNumberSlug(card);
+  if (typeof window !== 'undefined') {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    return `${origin}${pathname}#card-${slug}`;
+  }
+  return `#card-${slug}`;
+}
+
+/**
+ * Find card by card number or id with robust matching
+ * Supports: exact cardNumber, cardNumber without leading zeroes, card id, '#001', 'card-001', etc.
+ */
+export function findCardByNumberOrId(cardsList: FootballCard[], identifier: string): FootballCard | undefined {
+  if (!identifier || !cardsList || cardsList.length === 0) return undefined;
+  
+  let clean = decodeURIComponent(identifier).trim();
+  // Strip leading hash if passed
+  if (clean.startsWith('#')) {
+    clean = clean.substring(1);
+  }
+  
+  const lower = clean.toLowerCase();
+
+  // 1. Check exact cardNumber match (case-insensitive)
+  let found = cardsList.find(c => (c.cardNumber || '').trim().toLowerCase() === lower);
+  if (found) return found;
+
+  // 2. Check exact card ID match
+  found = cardsList.find(c => (c.id || '').toLowerCase() === lower);
+  if (found) return found;
+
+  // 3. Strip prefix like 'card-' or 'card/' or 'card_' or 'no-' or '#'
+  const stripped = lower.replace(/^(card|no|#)[-_/:]?/i, '').trim();
+  if (stripped) {
+    found = cardsList.find(c => (c.cardNumber || '').trim().toLowerCase() === stripped);
+    if (found) return found;
+
+    found = cardsList.find(c => (c.id || '').toLowerCase() === stripped);
+    if (found) return found;
+
+    // 4. Match without leading zeroes (e.g. "1" matches "001" or "01")
+    const numOnly = stripped.replace(/^0+/, '');
+    if (numOnly) {
+      found = cardsList.find(c => {
+        const cardNumOnly = (c.cardNumber || '').trim().toLowerCase().replace(/^0+/, '');
+        return cardNumOnly === numOnly;
+      });
+      if (found) return found;
+    }
+  }
+
+  // 5. Fallback: match by player name if someone shared player name
+  found = cardsList.find(c => (c.player || '').trim().toLowerCase() === lower);
+  if (found) return found;
+
+  return undefined;
 }
