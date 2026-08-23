@@ -165,86 +165,206 @@ export function getPriceChangeStats(basePrice: number, currentPrice: number): {
 
 export interface DynamicPricingCalculation {
   basePrice: number;
-  buyRequestsCount: number;
-  sellListingsCount: number;
-  totalActiveUsers: number;
+  uniqueOwners: number;
+  scarcityFactor: number;
+  completedTransactionsCount: number;
+  averageTransactionPrice: number;
+  hasTransactionHistory: boolean;
+  basePriceWeight: number;
+  transactionPriceWeight: number;
+  transactionFactor: number;
   k: number;
-  calculatedRawPrice: number;
+  calculatedRawValue: number;
+  calculatedRawPrice: number; // alias for backwards compatibility
   finalPrice: number;
+  finalMarketValue: number; // alias
   minPrice: number;
   maxPrice: number;
   isCappedMin: boolean;
   isCappedMax: boolean;
+  priceChangeDiff: number;
+  priceChangePercentage: number;
   demand: ReturnType<typeof getDemandLevel>;
   priceChange: ReturnType<typeof getPriceChangeStats>;
+  buyRequestsCount: number;
+  sellListingsCount: number;
+  totalActiveUsers: number;
 }
 
 /**
- * CORE DYNAMIC PRICING FORMULA:
- * Market Price = Base Price × (1 + ((Buy Requests − Sell Listings) ÷ Total Active Users) × K)
+ * Calculates Outlier-Resistant / Trimmed Average of Transaction Prices
+ * Discards extremes if sample >= 4 for robust anti-manipulation protection.
+ */
+export function calculateRobustAveragePrice(prices: number[]): number {
+  const valid = prices.filter(p => typeof p === 'number' && !isNaN(p) && isFinite(p) && p > 0);
+  if (valid.length === 0) return 0;
+  if (valid.length === 1) return valid[0];
+  if (valid.length <= 3) {
+    const sum = valid.reduce((a, b) => a + b, 0);
+    return Math.round(sum / valid.length);
+  }
+
+  // Trimmed average: discard lowest and highest single price when N >= 4
+  const sorted = [...valid].sort((a, b) => a - b);
+  const trimmed = sorted.slice(1, sorted.length - 1);
+  const sum = trimmed.reduce((a, b) => a + b, 0);
+  return Math.round(sum / trimmed.length);
+}
+
+/**
+ * NEW DYNAMIC FOOTBALL CARD MARKET VALUE SYSTEM:
  * 
- * Protected by:
- * Final Price = MIN(Max Price, MAX(Min Price, Calculated Price))
+ * Market Value = Base Price × Scarcity Factor × Transaction Factor
+ * 
+ * Scarcity Factor = 1 + (K / √Owners)
+ * Transaction Factor = Base Price Weight + (Transaction Price Weight × Average Transaction Price / Base Price)
+ * 
+ * Price Protection:
+ * Final Market Value = MIN(Max Price, MAX(Min Price, Calculated Market Value))
  * Default Min = 50% of Base Price
  * Default Max = 500% of Base Price
+ * 
+ * Weights rule:
+ * Base Price Weight + Transaction Price Weight = 1.00 (100%)
+ * 
+ * No Transaction History rule:
+ * If a card has never been purchased (0 completed transactions):
+ * Average Transaction Price = Base Price
+ * (Making the Transaction Factor = 1.0, so Market Value = Base Price × Scarcity Factor)
  */
-export function calculateDynamicMarketPrice(
+export function calculateCardMarketValue(
   card: Partial<FootballCard>,
   options: {
-    buyRequests?: BuyRequest[] | number;
+    ownersCount?: number;
+    transactions?: { amount?: number; price?: number; type?: string; status?: string; cardId?: string }[] | number[];
     listings?: MarketListing[] | number;
+    buyRequests?: BuyRequest[] | number;
     totalActiveUsers?: number;
     settings?: MarketSettings;
   } = {}
 ): DynamicPricingCalculation {
-  const basePrice = getCardBasePrice(card);
+  const basePrice = Math.max(1, getCardBasePrice(card));
 
-  // Determine active buy requests for this card
-  let buyRequestsCount = 0;
-  if (typeof options.buyRequests === 'number') {
-    buyRequestsCount = Math.max(0, options.buyRequests);
-  } else if (Array.isArray(options.buyRequests)) {
-    buyRequestsCount = options.buyRequests.filter(
-      r => r.status === 'active' && (r.cardId === card.id || r.card?.id === card.id || (card.player && r.card?.player?.toLowerCase() === card.player.toLowerCase()))
-    ).length;
-  } else if (typeof card.buyRequests === 'number') {
-    buyRequestsCount = Math.max(0, card.buyRequests);
-  }
-
-  // Determine active sell listings for this card
-  let sellListingsCount = 0;
-  if (typeof options.listings === 'number') {
-    sellListingsCount = Math.max(0, options.listings);
-  } else if (Array.isArray(options.listings)) {
-    sellListingsCount = options.listings.filter(
-      l => l.status === 'active' && (l.cardId === card.id || l.card?.id === card.id || (card.player && l.card?.player?.toLowerCase() === card.player.toLowerCase()))
-    ).length;
-  } else if (typeof card.sellListings === 'number') {
-    sellListingsCount = Math.max(0, card.sellListings);
-  }
-
-  // Determine Total Active Marketplace Users
-  const rawActiveUsers = options.totalActiveUsers !== undefined
-    ? Number(options.totalActiveUsers)
-    : 100;
-  const totalActiveUsers = isNaN(rawActiveUsers) || rawActiveUsers <= 0 ? 0 : rawActiveUsers;
-
-  // Demand Sensitivity Factor K (default 2)
+  // 1. Scarcity Factor: K / √Owners
+  // K Constant (default 2.0)
   const cardK = typeof card.demandSensitivity === 'number' && card.demandSensitivity > 0
     ? card.demandSensitivity
     : undefined;
-  const settingsK = options.settings?.defaultK && options.settings.defaultK > 0
-    ? options.settings.defaultK
-    : undefined;
+  const settingsK = options.settings?.defaultK ?? options.settings?.kFactor ?? 2;
   const k = cardK ?? settingsK ?? 2;
 
-  // Limits Configuration
+  // Determine Unique Owners count
+  let rawOwners: number = 0;
+  if (typeof options.ownersCount === 'number') {
+    rawOwners = Math.max(0, options.ownersCount);
+  } else if (typeof (card as any).ownersCount === 'number') {
+    rawOwners = Math.max(0, (card as any).ownersCount);
+  } else if (card.stock !== undefined && card.maxSupply !== undefined) {
+    rawOwners = Math.max(0, card.maxSupply - card.stock);
+  } else {
+    // If not explicitly provided, estimate from default maxSupply & stock
+    const defaultMax = getDefaultMaxSupply(card);
+    const defaultCur = getDefaultStock(card);
+    rawOwners = Math.max(0, defaultMax - defaultCur);
+  }
+
+  // Safe owners: if owners <= 0, safeguard division by zero with safe minimum 1
+  const safeOwners = Math.max(1, rawOwners);
+  const scarcityFactor = 1 + (k / Math.sqrt(safeOwners));
+
+  // 2. Weights Configuration (Must sum to 1.0)
+  let rawBaseWeight = options.settings?.basePriceWeight !== undefined ? Number(options.settings.basePriceWeight) : 0.40;
+  let rawTxWeight = options.settings?.transactionPriceWeight !== undefined ? Number(options.settings.transactionPriceWeight) : 0.60;
+
+  // Normalize percentages if user entered 40 instead of 0.40
+  if (rawBaseWeight > 1 || rawTxWeight > 1) {
+    rawBaseWeight = rawBaseWeight / 100;
+    rawTxWeight = rawTxWeight / 100;
+  }
+
+  // Ensure weights sum to 1.0
+  const weightSum = rawBaseWeight + rawTxWeight;
+  const basePriceWeight = weightSum > 0 ? Number((rawBaseWeight / weightSum).toFixed(4)) : 0.40;
+  const transactionPriceWeight = weightSum > 0 ? Number((rawTxWeight / weightSum).toFixed(4)) : 0.60;
+
+  // 3. Completed Transaction Prices Extraction & Anti-Manipulation Protection
+  const sampleSize = options.settings?.transactionSampleSize && options.settings.transactionSampleSize > 0
+    ? options.settings.transactionSampleSize
+    : 20;
+
+  const validCompletedPrices: number[] = [];
+
+  if (Array.isArray(options.transactions)) {
+    options.transactions.forEach(t => {
+      if (typeof t === 'number') {
+        if (!isNaN(t) && isFinite(t) && t > 0) validCompletedPrices.push(t);
+      } else if (typeof t === 'object' && t !== null) {
+        // Exclude cancelled/pending
+        if (t.status === 'cancelled' || t.status === 'pending' || t.status === 'failed') return;
+        const amt = Number(t.amount ?? t.price);
+        if (!isNaN(amt) && isFinite(amt) && amt > 0) {
+          validCompletedPrices.push(amt);
+        }
+      }
+    });
+  }
+
+  // Also include sold listings if listings are passed
+  if (Array.isArray(options.listings)) {
+    const cardId = card.id;
+    const cardPlayer = (card.player || '').toLowerCase().trim();
+    options.listings
+      .filter(l => l.status === 'sold' && (l.cardId === cardId || l.card?.id === cardId || (cardPlayer && l.card?.player?.toLowerCase().trim() === cardPlayer)))
+      .forEach(l => {
+        const p = Number(l.price);
+        if (!isNaN(p) && isFinite(p) && p > 0) {
+          validCompletedPrices.push(p);
+        }
+      });
+  }
+
+  // Also fallback to historical sales recorded on the card if no external array was provided
+  if (validCompletedPrices.length === 0 && card.priceHistory && card.priceHistory.length > 1) {
+    card.priceHistory.slice(1).forEach(pt => {
+      const p = Number(pt.price);
+      if (!isNaN(p) && isFinite(p) && p > 0) validCompletedPrices.push(p);
+    });
+  } else if (validCompletedPrices.length === 0 && card.lastSalePrice && card.lastSalePrice > 0) {
+    validCompletedPrices.push(card.lastSalePrice);
+  }
+
+  // Take latest N transactions based on sampleSize
+  const sampledPrices = validCompletedPrices.slice(-sampleSize);
+  const completedTransactionsCount = sampledPrices.length;
+  const hasTransactionHistory = completedTransactionsCount > 0;
+
+  // No Transaction History rule: If 0 completed transactions exist, Average = Base Price
+  let averageTransactionPrice = basePrice;
+  if (hasTransactionHistory) {
+    averageTransactionPrice = calculateRobustAveragePrice(sampledPrices);
+    if (averageTransactionPrice <= 0) averageTransactionPrice = basePrice;
+  }
+
+  // 4. Transaction Factor:
+  // Transaction Factor = Base Price Weight + (Transaction Price Weight × Average Transaction Price / Base Price)
+  const transactionFactor = basePriceWeight + (transactionPriceWeight * (averageTransactionPrice / basePrice));
+
+  // 5. Combined Market Value Calculation:
+  // Market Value = Base Price × Scarcity Factor × Transaction Factor
+  let calculatedRawValue = basePrice * scarcityFactor * transactionFactor;
+
+  if (isNaN(calculatedRawValue) || !isFinite(calculatedRawValue) || calculatedRawValue <= 0) {
+    calculatedRawValue = basePrice;
+  }
+
+  // 6. Price Protection Limits:
+  // Min Price = 50% of Base Price (default), Max Price = 500% of Base Price (default)
   const minPercent = options.settings?.minPricePercentage !== undefined && options.settings.minPricePercentage > 0
     ? options.settings.minPricePercentage
-    : 50; // 50%
+    : 50;
   const maxPercent = options.settings?.maxPricePercentage !== undefined && options.settings.maxPricePercentage > 0
     ? options.settings.maxPricePercentage
-    : 500; // 500%
+    : 500;
 
   const minPrice = card.minPrice !== undefined && card.minPrice > 0
     ? card.minPrice
@@ -254,68 +374,81 @@ export function calculateDynamicMarketPrice(
     ? card.maxPrice
     : Math.max(minPrice, Math.round(basePrice * (maxPercent / 100)));
 
-  // Perform Pricing Calculation with strict safety checks
-  let calculatedRawPrice = basePrice;
+  const bounded = Math.min(maxPrice, Math.max(minPrice, calculatedRawValue));
+  const finalMarketValue = Math.max(1, Math.round(bounded));
 
-  if (totalActiveUsers <= 0) {
-    calculatedRawPrice = basePrice;
-  } else {
-    // Market Price = Base Price × (1 + ((Buy Requests − Sell Listings) ÷ Total Active Users) × K)
-    const netDemand = (buyRequestsCount - sellListingsCount) / totalActiveUsers;
-    const factor = 1 + (netDemand * k);
-    calculatedRawPrice = basePrice * factor;
-  }
+  const isCappedMin = calculatedRawValue <= minPrice;
+  const isCappedMax = calculatedRawValue >= maxPrice;
 
-  // Check numerical validity
-  if (isNaN(calculatedRawPrice) || !isFinite(calculatedRawPrice) || calculatedRawPrice <= 0) {
-    calculatedRawPrice = basePrice;
-  }
+  // Stats
+  const priceChangeDiff = finalMarketValue - basePrice;
+  const priceChangePercentage = Math.round(((finalMarketValue - basePrice) / basePrice) * 100 * 10) / 10;
+  const priceChange = getPriceChangeStats(basePrice, finalMarketValue);
 
-  // Apply Price Protection limits: MIN(Max Price, MAX(Min Price, Calculated Price))
-  const boundedPrice = Math.min(maxPrice, Math.max(minPrice, calculatedRawPrice));
-  const finalPrice = Math.max(1, Math.round(boundedPrice));
+  // Buy / Sell count helper
+  let buyRequestsCount = 0;
+  if (typeof options.buyRequests === 'number') buyRequestsCount = options.buyRequests;
+  else if (Array.isArray(options.buyRequests)) buyRequestsCount = options.buyRequests.length;
 
-  const isCappedMin = calculatedRawPrice <= minPrice;
-  const isCappedMax = calculatedRawPrice >= maxPrice;
+  let sellListingsCount = 0;
+  if (typeof options.listings === 'number') sellListingsCount = options.listings;
+  else if (Array.isArray(options.listings)) sellListingsCount = options.listings.filter(l => l.status === 'active').length;
 
   const demand = getDemandLevel(buyRequestsCount, sellListingsCount);
-  const priceChange = getPriceChangeStats(basePrice, finalPrice);
 
   return {
     basePrice,
-    buyRequestsCount,
-    sellListingsCount,
-    totalActiveUsers: totalActiveUsers || 1,
+    uniqueOwners: rawOwners,
+    scarcityFactor: Number(scarcityFactor.toFixed(4)),
+    completedTransactionsCount,
+    averageTransactionPrice: Math.round(averageTransactionPrice),
+    hasTransactionHistory,
+    basePriceWeight,
+    transactionPriceWeight,
+    transactionFactor: Number(transactionFactor.toFixed(4)),
     k,
-    calculatedRawPrice: Math.round(calculatedRawPrice),
-    finalPrice,
+    calculatedRawValue: Math.round(calculatedRawValue),
+    calculatedRawPrice: Math.round(calculatedRawValue),
+    finalPrice: finalMarketValue,
+    finalMarketValue,
     minPrice,
     maxPrice,
     isCappedMin,
     isCappedMax,
+    priceChangeDiff,
+    priceChangePercentage,
     demand,
-    priceChange
+    priceChange,
+    buyRequestsCount,
+    sellListingsCount,
+    totalActiveUsers: options.totalActiveUsers || 100
   };
 }
 
 /**
- * Returns the single calculated final price (backwards compatible helper)
+ * Universal dynamic price calculator (Aliases for full backwards compatibility)
  */
+export const calculateDynamicMarketPrice = calculateCardMarketValue;
+
 export function calculateCardMarketPrice(
   card: Partial<FootballCard>,
   listings?: MarketListing[] | number,
   buyRequests?: BuyRequest[] | number,
   totalActiveUsers?: number,
-  settings?: MarketSettings
+  settings?: MarketSettings,
+  ownersCount?: number,
+  transactions?: any[]
 ): number {
   if (!card) return 100;
-  const result = calculateDynamicMarketPrice(card, {
+  const result = calculateCardMarketValue(card, {
     listings,
     buyRequests,
     totalActiveUsers,
-    settings
+    settings,
+    ownersCount,
+    transactions
   });
-  return result.finalPrice;
+  return result.finalMarketValue;
 }
 
 /**

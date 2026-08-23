@@ -98,10 +98,13 @@ export function CardPreviewPage({
   const [marketSettings, setMarketSettings] = useState<MarketSettings | undefined>(undefined);
   const [totalActiveUsers, setTotalActiveUsers] = useState<number>(100);
 
+  const [uniqueOwnersCount, setUniqueOwnersCount] = useState<number>(0);
+  const [completedTxPrices, setCompletedTxPrices] = useState<number[]>([]);
+
   // Generate canonical direct URL for this single card page based on card number
   const directCardUrl = getCardDirectUrl(card);
 
-  // Listen to listings, buy requests, and market settings for this card in real-time
+  // Listen to listings, buy requests, unique owners, and completed transactions for this card in real-time
   useEffect(() => {
     try {
       const qListings = collection(db, 'market_listings');
@@ -110,7 +113,7 @@ export function CardPreviewPage({
         const allMatches: MarketListing[] = [];
         snapshot.forEach(docSnap => {
           const item = { id: docSnap.id, ...docSnap.data() } as MarketListing;
-          if (item.cardId === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) {
+          if (item.cardId === card.id || item.card?.id === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) {
             allMatches.push(item);
             if (item.status === 'active') {
               activeMatches.push(item);
@@ -131,7 +134,7 @@ export function CardPreviewPage({
         const activeRequests: BuyRequest[] = [];
         snapshot.forEach(docSnap => {
           const item = { id: docSnap.id, ...docSnap.data() } as BuyRequest;
-          if ((item.cardId === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) && item.status === 'active') {
+          if ((item.cardId === card.id || item.card?.id === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) && item.status === 'active') {
             activeRequests.push(item);
           }
         });
@@ -148,6 +151,30 @@ export function CardPreviewPage({
       const qUsers = collection(db, 'users');
       const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
         setTotalActiveUsers(Math.max(10, snapshot.size || 100));
+        let owners = 0;
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          const vault: string[] = Array.isArray(data.vaultIds) ? data.vaultIds : (Array.isArray(data.collectionIds) ? data.collectionIds : []);
+          if (vault.includes(card.id)) {
+            owners++;
+          }
+        });
+        setUniqueOwnersCount(owners);
+      }, () => {});
+
+      const qTransactions = collection(db, 'transactions');
+      const unsubscribeTx = onSnapshot(qTransactions, (snapshot) => {
+        const prices: number[] = [];
+        snapshot.forEach(docSnap => {
+          const t = docSnap.data();
+          if (t.cardId === card.id && (t.type === 'market_buy' || t.type === 'buy_card' || t.type === 'market_sell')) {
+            const amt = Math.abs(Number(t.amount));
+            if (!isNaN(amt) && isFinite(amt) && amt > 0) {
+              prices.push(amt);
+            }
+          }
+        });
+        setCompletedTxPrices(prices);
       }, () => {});
 
       return () => {
@@ -155,6 +182,7 @@ export function CardPreviewPage({
         unsubscribeBuy();
         unsubscribeSettings();
         unsubscribeUsers();
+        unsubscribeTx();
       };
     } catch (e) {
       console.error(e);

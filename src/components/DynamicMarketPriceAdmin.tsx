@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { FootballCard, BuyRequest, MarketListing, MarketSettings, PriceHistoryRecord } from '../types';
-import { calculateDynamicMarketPrice, formatCurrency, cn, getDemandLevel, getPriceChangeStats } from '../lib/utils';
-import { db, doc, setDoc, updateDoc, collection, onSnapshot, query, orderBy, limit } from '../lib/firebase';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FootballCard, BuyRequest, MarketListing, MarketSettings, PriceHistoryRecord, WalletTransaction } from '../types';
+import { calculateCardMarketValue, formatCurrency, cn, getDemandLevel, getPriceChangeStats, calculateRobustAveragePrice } from '../lib/utils';
+import { db, doc, setDoc, updateDoc, collection, onSnapshot, query, orderBy, limit, getDocs } from '../lib/firebase';
 import { 
   Sliders, 
   ShieldCheck, 
@@ -19,7 +19,15 @@ import {
   Sparkles,
   Info,
   SlidersHorizontal,
-  Flame
+  Flame,
+  Scale,
+  Percent,
+  Layers,
+  Search,
+  Lock,
+  ArrowUpRight,
+  Coins,
+  DollarSign
 } from 'lucide-react';
 
 interface DynamicMarketPriceAdminProps {
@@ -40,14 +48,26 @@ export function DynamicMarketPriceAdmin({
   onToast
 }: DynamicMarketPriceAdminProps) {
   // Global Settings State
-  const [kFactor, setKFactor] = useState<number>(currentSettings?.defaultK ?? 2);
+  const [kFactor, setKFactor] = useState<number>(currentSettings?.defaultK ?? currentSettings?.kFactor ?? 2);
+  const [basePriceWeight, setBasePriceWeight] = useState<number>(
+    currentSettings?.basePriceWeight !== undefined ? (currentSettings.basePriceWeight > 1 ? currentSettings.basePriceWeight : Math.round(currentSettings.basePriceWeight * 100)) : 40
+  );
+  const [txPriceWeight, setTxPriceWeight] = useState<number>(
+    currentSettings?.transactionPriceWeight !== undefined ? (currentSettings.transactionPriceWeight > 1 ? currentSettings.transactionPriceWeight : Math.round(currentSettings.transactionPriceWeight * 100)) : 60
+  );
+  const [sampleSize, setSampleSize] = useState<number>(currentSettings?.transactionSampleSize ?? 20);
   const [minPricePercent, setMinPricePercent] = useState<number>(currentSettings?.minPricePercentage ?? 50);
   const [maxPricePercent, setMaxPricePercent] = useState<number>(currentSettings?.maxPricePercentage ?? 500);
-  const [maxBuyRequestsPerUser, setMaxBuyRequestsPerUser] = useState<number>(currentSettings?.maxBuyRequestsPerUser ?? 5);
-  const [activeUsersInput, setActiveUsersInput] = useState<number>(totalActiveUsers || 100);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  // Per-card edit state
+  // Ownership Mapping State across all user collections (unique owners)
+  const [uniqueOwnersMap, setUniqueOwnersMap] = useState<Record<string, number>>({});
+  // Completed transactions mapped by cardId
+  const [cardCompletedTransactionsMap, setCardCompletedTransactionsMap] = useState<Record<string, number[]>>({});
+  const [recentTransactions, setRecentTransactions] = useState<WalletTransaction[]>([]);
+  const [loadingLedger, setLoadingLedger] = useState(true);
+
+  // Per-card edit state in Admin Table
   const [selectedCardForEdit, setSelectedCardForEdit] = useState<FootballCard | null>(null);
   const [cardBasePriceInput, setCardBasePriceInput] = useState<number>(100);
   const [cardCustomKInput, setCardCustomKInput] = useState<string>('');
@@ -57,69 +77,144 @@ export function DynamicMarketPriceAdmin({
 
   // Search & Filter in Admin Table
   const [cardSearch, setCardSearch] = useState('');
-  const [filterDemand, setFilterDemand] = useState<string>('all');
+  const [filterRarity, setFilterRarity] = useState<string>('all');
 
-  // Live Formula Simulator State
+  // Interactive Live Formula Simulator State
   const [simBasePrice, setSimBasePrice] = useState<number>(100);
-  const [simBuyRequests, setSimBuyRequests] = useState<number>(15);
-  const [simSellListings, setSimSellListings] = useState<number>(5);
-  const [simActiveUsers, setSimActiveUsers] = useState<number>(100);
+  const [simOwners, setSimOwners] = useState<number>(25);
   const [simK, setSimK] = useState<number>(2);
+  const [simAvgTxPrice, setSimAvgTxPrice] = useState<number>(150);
+  const [simBaseWeight, setSimBaseWeight] = useState<number>(40);
+  const [simTxWeight, setSimTxWeight] = useState<number>(60);
   const [simMinPercent, setSimMinPercent] = useState<number>(50);
   const [simMaxPercent, setSimMaxPercent] = useState<number>(500);
 
-  // Real-time Price History Logs
-  const [priceHistoryLogs, setPriceHistoryLogs] = useState<PriceHistoryRecord[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(true);
-
-  // Sync state if props change
+  // Sync state if incoming settings change
   useEffect(() => {
     if (currentSettings) {
-      if (currentSettings.defaultK !== undefined) setKFactor(currentSettings.defaultK);
-      if (currentSettings.minPricePercentage !== undefined) setMinPricePercent(currentSettings.minPricePercentage);
-      if (currentSettings.maxPricePercentage !== undefined) setMaxPricePercent(currentSettings.maxPricePercentage);
-      if (currentSettings.maxBuyRequestsPerUser !== undefined) setMaxBuyRequestsPerUser(currentSettings.maxBuyRequestsPerUser);
+      if (currentSettings.defaultK !== undefined || currentSettings.kFactor !== undefined) {
+        setKFactor(currentSettings.defaultK ?? currentSettings.kFactor ?? 2);
+      }
+      if (currentSettings.basePriceWeight !== undefined) {
+        setBasePriceWeight(currentSettings.basePriceWeight > 1 ? currentSettings.basePriceWeight : Math.round(currentSettings.basePriceWeight * 100));
+      }
+      if (currentSettings.transactionPriceWeight !== undefined) {
+        setTxPriceWeight(currentSettings.transactionPriceWeight > 1 ? currentSettings.transactionPriceWeight : Math.round(currentSettings.transactionPriceWeight * 100));
+      }
+      if (currentSettings.transactionSampleSize !== undefined) {
+        setSampleSize(currentSettings.transactionSampleSize);
+      }
+      if (currentSettings.minPricePercentage !== undefined) {
+        setMinPricePercent(currentSettings.minPricePercentage);
+      }
+      if (currentSettings.maxPricePercentage !== undefined) {
+        setMaxPricePercent(currentSettings.maxPricePercentage);
+      }
     }
-    if (totalActiveUsers) {
-      setActiveUsersInput(totalActiveUsers);
-    }
-  }, [currentSettings, totalActiveUsers]);
+  }, [currentSettings]);
 
-  // Listen to Price History logs
+  // Listen to users collection to calculate unique card owners in real time
   useEffect(() => {
     try {
-      const q = query(collection(db, 'price_history'), orderBy('timestamp', 'desc'), limit(50));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const logs: PriceHistoryRecord[] = [];
+      const usersRef = collection(db, 'users');
+      const unsubscribeUsers = onSnapshot(usersRef, (snapshot) => {
+        const counts: Record<string, number> = {};
         snapshot.forEach(docSnap => {
-          logs.push({ id: docSnap.id, ...docSnap.data() } as PriceHistoryRecord);
+          const data = docSnap.data();
+          const vault: string[] = Array.isArray(data.vaultIds) 
+            ? data.vaultIds 
+            : (Array.isArray(data.collectionIds) ? data.collectionIds : []);
+          const uniqueInUser = new Set(vault);
+          uniqueInUser.forEach(cardId => {
+            counts[cardId] = (counts[cardId] || 0) + 1;
+          });
         });
-        setPriceHistoryLogs(logs);
-        setLoadingLogs(false);
+        setUniqueOwnersMap(counts);
       }, (err) => {
-        console.error("Error fetching price history logs:", err);
-        setLoadingLogs(false);
+        console.error("Error computing unique card owners:", err);
       });
-      return () => unsubscribe();
+
+      return () => unsubscribeUsers();
     } catch (e) {
       console.error(e);
-      setLoadingLogs(false);
     }
   }, []);
 
+  // Listen to transactions collection to extract completed transaction prices
+  useEffect(() => {
+    try {
+      const txRef = query(collection(db, 'transactions'), orderBy('timestamp', 'desc'), limit(150));
+      const unsubscribeTx = onSnapshot(txRef, (snapshot) => {
+        const txList: WalletTransaction[] = [];
+        const cardTxMap: Record<string, number[]> = {};
+
+        snapshot.forEach(docSnap => {
+          const item = { id: docSnap.id, ...docSnap.data() } as WalletTransaction;
+          txList.push(item);
+
+          // If this is a completed buy/sell transaction for a specific card
+          if (item.cardId && (item.type === 'market_buy' || item.type === 'buy_card' || item.type === 'market_sell')) {
+            const price = Math.abs(Number(item.amount));
+            if (!isNaN(price) && isFinite(price) && price > 0) {
+              if (!cardTxMap[item.cardId]) cardTxMap[item.cardId] = [];
+              cardTxMap[item.cardId].push(price);
+            }
+          }
+        });
+
+        setRecentTransactions(txList);
+        setCardCompletedTransactionsMap(cardTxMap);
+        setLoadingLedger(false);
+      }, (err) => {
+        console.error("Error loading completed transactions:", err);
+        setLoadingLedger(false);
+      });
+
+      return () => unsubscribeTx();
+    } catch (e) {
+      console.error(e);
+      setLoadingLedger(false);
+    }
+  }, []);
+
+  // Weight validation
+  const totalWeight = basePriceWeight + txPriceWeight;
+  const isWeightValid = totalWeight === 100;
+
+  const handleAutoBalanceWeights = (newBase?: number) => {
+    const base = newBase !== undefined ? newBase : basePriceWeight;
+    const clampedBase = Math.max(0, Math.min(100, base));
+    setBasePriceWeight(clampedBase);
+    setTxPriceWeight(100 - clampedBase);
+  };
+
+  const handleSetPresetWeights = (base: number, tx: number) => {
+    setBasePriceWeight(base);
+    setTxPriceWeight(tx);
+  };
+
   const handleSaveGlobalSettings = async () => {
+    if (!isWeightValid) {
+      alert(`The weights must sum to exactly 100%. Currently they sum to ${totalWeight}%. Click 'Auto-Balance' or adjust the sliders.`);
+      return;
+    }
+
     setIsSavingSettings(true);
     try {
       const settingsRef = doc(db, 'market_settings', 'global');
       const updated: MarketSettings = {
         defaultK: Number(kFactor) || 2,
+        kFactor: Number(kFactor) || 2,
+        basePriceWeight: Number((basePriceWeight / 100).toFixed(4)),
+        transactionPriceWeight: Number((txPriceWeight / 100).toFixed(4)),
+        transactionSampleSize: Number(sampleSize) || 20,
         minPricePercentage: Number(minPricePercent) || 50,
         maxPricePercentage: Number(maxPricePercent) || 500,
-        maxBuyRequestsPerUser: Number(maxBuyRequestsPerUser) || 5,
         updatedAt: Date.now()
       };
+
       await setDoc(settingsRef, updated, { merge: true });
-      if (onToast) onToast("Dynamic Market Price Engine settings updated successfully!");
+      if (onToast) onToast("✅ Dynamic Market Value System configuration saved successfully!");
     } catch (err) {
       console.error("Failed to save market settings:", err);
       alert("Failed to save market settings.");
@@ -160,140 +255,224 @@ export function DynamicMarketPriceAdmin({
     }
   };
 
-  // Run simulator calculation
-  const simResult = React.useMemo(() => {
-    const rawActive = Math.max(1, simActiveUsers);
-    const netDemand = (simBuyRequests - simSellListings) / rawActive;
-    const factor = 1 + (netDemand * simK);
-    const rawCalculated = simBasePrice * factor;
+  // Live Formula Simulator Computation
+  const simResult = useMemo(() => {
+    const safeBase = Math.max(1, simBasePrice);
+    const safeOwners = Math.max(1, simOwners);
+    const k = Number(simK) || 2;
+    
+    // Scarcity Factor = 1 + (K / √Owners)
+    const sqrtOwners = Math.sqrt(safeOwners);
+    const scarcityFactor = 1 + (k / sqrtOwners);
 
-    const minP = Math.max(1, Math.round(simBasePrice * (simMinPercent / 100)));
-    const maxP = Math.max(minP, Math.round(simBasePrice * (simMaxPercent / 100)));
-    const finalP = Math.min(maxP, Math.max(minP, Math.round(rawCalculated)));
+    // Weights
+    const bWeight = (simBaseWeight || 40) / 100;
+    const txWeight = (simTxWeight || 60) / 100;
 
-    const demand = getDemandLevel(simBuyRequests, simSellListings);
-    const diff = finalP - simBasePrice;
-    const pct = simBasePrice > 0 ? Math.round((diff / simBasePrice) * 1000) / 10 : 0;
+    // Transaction Factor = Base Price Weight + (Transaction Price Weight × Average Transaction Price / Base Price)
+    const safeAvgTx = Math.max(1, simAvgTxPrice);
+    const txFactor = bWeight + (txWeight * (safeAvgTx / safeBase));
+
+    // Raw Market Value = Base Price × Scarcity Factor × Transaction Factor
+    const rawValue = safeBase * scarcityFactor * txFactor;
+
+    // Limits
+    const minP = Math.max(1, Math.round(safeBase * ((simMinPercent || 50) / 100)));
+    const maxP = Math.max(minP, Math.round(safeBase * ((simMaxPercent || 500) / 100)));
+    const finalValue = Math.min(maxP, Math.max(minP, Math.round(rawValue)));
+
+    const diff = finalValue - safeBase;
+    const pctChange = Math.round((diff / safeBase) * 1000) / 10;
 
     return {
-      netDemand,
-      factor,
-      rawCalculated: Math.round(rawCalculated),
+      safeBase,
+      safeOwners,
+      sqrtOwners: sqrtOwners.toFixed(2),
+      scarcityFactor: scarcityFactor.toFixed(4),
+      txFactor: txFactor.toFixed(4),
+      rawValue: Math.round(rawValue),
       minP,
       maxP,
-      finalP,
-      demand,
+      finalValue,
       diff,
-      pct,
-      isMinCapped: rawCalculated <= minP,
-      isMaxCapped: rawCalculated >= maxP
+      pctChange,
+      isMinCapped: rawValue <= minP,
+      isMaxCapped: rawValue >= maxP
     };
-  }, [simBasePrice, simBuyRequests, simSellListings, simActiveUsers, simK, simMinPercent, simMaxPercent]);
+  }, [simBasePrice, simOwners, simK, simAvgTxPrice, simBaseWeight, simTxWeight, simMinPercent, simMaxPercent]);
 
-  // Filter cards table
-  const cardCalculations = React.useMemo(() => {
+  // Real-time Card Valuation Table Calculations
+  const currentSettingsConfig: MarketSettings = useMemo(() => ({
+    defaultK: kFactor,
+    kFactor,
+    basePriceWeight: basePriceWeight / 100,
+    transactionPriceWeight: txPriceWeight / 100,
+    transactionSampleSize: sampleSize,
+    minPricePercentage: minPricePercent,
+    maxPricePercentage: maxPricePercent
+  }), [kFactor, basePriceWeight, txPriceWeight, sampleSize, minPricePercent, maxPricePercent]);
+
+  const cardCalculations = useMemo(() => {
     return cards.map(c => {
-      const calc = calculateDynamicMarketPrice(c, {
-        buyRequests,
-        listings,
-        totalActiveUsers: activeUsersInput,
-        settings: {
-          defaultK: kFactor,
-          minPricePercentage: minPricePercent,
-          maxPricePercentage: maxPricePercent,
-          maxBuyRequestsPerUser
-        }
-      });
-      return { card: c, calc };
-    });
-  }, [cards, buyRequests, listings, activeUsersInput, kFactor, minPricePercent, maxPricePercent, maxBuyRequestsPerUser]);
+      const owners = uniqueOwnersMap[c.id] !== undefined ? uniqueOwnersMap[c.id] : (c.stock !== undefined && c.maxSupply !== undefined ? Math.max(0, c.maxSupply - c.stock) : 1);
+      const txPrices = cardCompletedTransactionsMap[c.id] || [];
 
-  const filteredCardCalculations = React.useMemo(() => {
-    return cardCalculations.filter(({ card, calc }) => {
-      const matchesSearch = 
-        card.player.toLowerCase().includes(cardSearch.toLowerCase()) ||
-        card.team.toLowerCase().includes(cardSearch.toLowerCase()) ||
-        card.cardNumber.toLowerCase().includes(cardSearch.toLowerCase());
-      
-      const matchesDemand = filterDemand === 'all' || calc.demand.level === filterDemand;
-      return matchesSearch && matchesDemand;
+      const calc = calculateCardMarketValue(c, {
+        ownersCount: owners,
+        transactions: txPrices,
+        listings,
+        buyRequests,
+        totalActiveUsers,
+        settings: currentSettingsConfig
+      });
+
+      return {
+        card: c,
+        calc,
+        owners,
+        txPricesCount: txPrices.length
+      };
     });
-  }, [cardCalculations, cardSearch, filterDemand]);
+  }, [cards, uniqueOwnersMap, cardCompletedTransactionsMap, listings, buyRequests, totalActiveUsers, currentSettingsConfig]);
+
+  const filteredCardCalculations = useMemo(() => {
+    return cardCalculations.filter(({ card }) => {
+      const q = cardSearch.toLowerCase().trim();
+      const matchesSearch = 
+        !q ||
+        card.player.toLowerCase().includes(q) ||
+        card.team.toLowerCase().includes(q) ||
+        card.cardNumber.toLowerCase().includes(q) ||
+        (card.set || '').toLowerCase().includes(q);
+      
+      const matchesRarity = filterRarity === 'all' || card.rarity === filterRarity;
+      return matchesSearch && matchesRarity;
+    });
+  }, [cardCalculations, cardSearch, filterRarity]);
 
   return (
     <div className="space-y-8 animate-fadeIn">
-      {/* Top Header & Formula Summary */}
-      <div className="bg-black text-white p-6 sm:p-8 border-4 border-black shadow-[8px_8px_0px_0px_#D4FF00]">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      {/* Top Header & Formula Definition Banner */}
+      <div className="bg-black text-white p-6 sm:p-8 border-4 border-black shadow-[8px_8px_0px_0px_#D4FF00] relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-[#D4FF00] text-black px-3 py-1 text-[10px] font-black uppercase tracking-widest">
-              <Sparkles size={14} /> DYNAMIC MARKET PRICE ENGINE
+            <div className="inline-flex items-center gap-2 bg-[#D4FF00] text-black px-3 py-1 text-[10px] font-black uppercase tracking-widest border border-black">
+              <Sparkles size={14} /> DYNAMIC MARKET VALUE SYSTEM
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight">
-              MARKET DEMAND & PRICE PROTECTION CONTROLS
+            <h2 className="text-2xl sm:text-4xl font-black uppercase tracking-tighter text-white">
+              MARKET VALUE ENGINE & ADMIN CONTROLS
             </h2>
-            <p className="text-xs sm:text-sm text-neutral-300 max-w-3xl font-mono leading-relaxed">
-              <strong>Core Formula:</strong> Market Price = Base Price × (1 + ((Buy Requests − Sell Listings) ÷ Total Active Users) × K)<br />
-              <strong>Price Protection:</strong> Final Price = MIN(Max Price, MAX(Min Price, Calculated Price))
-            </p>
+            <div className="bg-neutral-900/90 border border-neutral-700 p-3 text-xs sm:text-sm font-mono text-[#D4FF00] max-w-3xl space-y-1">
+              <p className="text-white font-bold uppercase tracking-wider text-[11px]">Formula:</p>
+              <p className="leading-relaxed">
+                Market Value = Base Price × Scarcity Factor × Transaction Factor
+              </p>
+              <p className="text-neutral-400 text-[11px]">
+                • Scarcity Factor = 1 + (K / √Owners)<br />
+                • Transaction Factor = Base Price Weight + (Transaction Price Weight × Average Transaction Price / Base Price)
+              </p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-neutral-900 border border-neutral-800 p-3">
-            <div className="p-2 border border-neutral-800">
-              <span className="text-[9px] text-neutral-400 font-black uppercase block">ACTIVE USERS</span>
-              <span className="text-xl font-black text-[#D4FF00] font-mono">{activeUsersInput}</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-neutral-900 border border-neutral-800 p-4 shrink-0">
+            <div className="p-2.5 border border-neutral-800 bg-black/40">
+              <span className="text-[9px] text-neutral-400 font-black uppercase block">K SENSITIVITY</span>
+              <span className="text-xl font-black text-[#D4FF00] font-mono">{kFactor}</span>
             </div>
-            <div className="p-2 border border-neutral-800">
-              <span className="text-[9px] text-neutral-400 font-black uppercase block">TOTAL BUY REQ</span>
-              <span className="text-xl font-black text-emerald-400 font-mono">
-                {buyRequests.filter(r => r.status === 'active').length}
-              </span>
+            <div className="p-2.5 border border-neutral-800 bg-black/40">
+              <span className="text-[9px] text-neutral-400 font-black uppercase block">BASE / TX WEIGHT</span>
+              <span className="text-xl font-black text-white font-mono">{basePriceWeight}% / {txPriceWeight}%</span>
             </div>
-            <div className="p-2 border border-neutral-800">
-              <span className="text-[9px] text-neutral-400 font-black uppercase block">ACTIVE LISTINGS</span>
-              <span className="text-xl font-black text-indigo-400 font-mono">
-                {listings.filter(l => l.status === 'active').length}
-              </span>
-            </div>
-            <div className="p-2 border border-neutral-800">
-              <span className="text-[9px] text-neutral-400 font-black uppercase block">GLOBAL K FACTOR</span>
-              <span className="text-xl font-black text-amber-400 font-mono">{kFactor}x</span>
+            <div className="p-2.5 border border-neutral-800 bg-black/40">
+              <span className="text-[9px] text-neutral-400 font-black uppercase block">SAMPLE SIZE</span>
+              <span className="text-xl font-black text-amber-400 font-mono">{sampleSize} sales</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* SECTION 1: GLOBAL ENGINE SETTINGS */}
+      {/* SECTION 1: GLOBAL MARKET VALUE SETTINGS */}
       <div className="bg-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
-        <div className="flex items-center justify-between border-b-2 border-black pb-4">
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="text-black" size={22} />
-            <h3 className="text-lg font-black uppercase tracking-tight text-black">
-              1. GLOBAL PRICING PARAMETERS
-            </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-black pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="text-black" size={22} />
+              <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-black">
+                1. MARKET VALUE PARAMETERS & WEIGHTS
+              </h3>
+            </div>
+            <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider mt-0.5">
+              Configure scarcity sensitivity, base vs transaction weight balance, sample size, and price protection bounds.
+            </p>
           </div>
           <button
             onClick={handleSaveGlobalSettings}
-            disabled={isSavingSettings}
-            className="flex items-center gap-2 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-widest transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
+            disabled={isSavingSettings || !isWeightValid}
+            className="flex items-center justify-center gap-2 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-6 py-3 text-xs font-black uppercase tracking-widest transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
           >
-            <Save size={14} /> {isSavingSettings ? 'SAVING...' : 'SAVE SETTINGS'}
+            <Save size={16} /> {isSavingSettings ? 'SAVING...' : 'SAVE MARKET SETTINGS'}
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* K Factor */}
-          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3">
+        {/* Weights Balance Indicator */}
+        <div className={cn(
+          "p-4 border-2 flex flex-col md:flex-row items-center justify-between gap-4 transition-all",
+          isWeightValid 
+            ? "bg-emerald-50 border-emerald-600 text-emerald-900" 
+            : "bg-rose-50 border-rose-600 text-rose-900"
+        )}>
+          <div className="flex items-center gap-3">
+            <Scale size={24} className={isWeightValid ? "text-emerald-700" : "text-rose-700"} />
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide">
+                Weights Sum Rule: Base Price Weight ({basePriceWeight}%) + Transaction Price Weight ({txPriceWeight}%) = {totalWeight}%
+              </p>
+              <p className="text-[11px] font-bold">
+                {isWeightValid 
+                  ? "✅ Perfectly balanced! Weights add up to exactly 100% (1.00)."
+                  : `⚠️ Invalid weight sum: Total is ${totalWeight}%. Must equal exactly 100%.`}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleAutoBalanceWeights()}
+              className="bg-black hover:bg-neutral-800 text-white px-3 py-1.5 text-xs font-black uppercase tracking-wider border border-black"
+            >
+              Auto-Balance (100%)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetPresetWeights(40, 60)}
+              className="bg-white hover:bg-neutral-100 text-black px-3 py-1.5 text-xs font-black uppercase tracking-wider border border-black"
+            >
+              Default (40 / 60)
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetPresetWeights(50, 50)}
+              className="bg-white hover:bg-neutral-100 text-black px-3 py-1.5 text-xs font-black uppercase tracking-wider border border-black"
+            >
+              50 / 50
+            </button>
+          </div>
+        </div>
+
+        {/* Controls Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* K Factor Control */}
+          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex items-center justify-between">
               <label className="text-xs font-black uppercase tracking-widest text-black">
-                Sensitivity Factor (K)
+                Scarcity Factor Constant (K)
               </label>
               <span className="bg-black text-[#D4FF00] text-xs font-mono font-black px-2 py-0.5">
-                {kFactor}
+                K = {kFactor}
               </span>
             </div>
             <p className="text-[10px] font-bold text-neutral-600 uppercase">
-              Controls how strongly net demand impacts the price. (Default = 2).
+              Controls scarcity impact. Default = 2. Formula: (1 + K / √Owners).
             </p>
             <input 
               type="range"
@@ -312,13 +491,120 @@ export function DynamicMarketPriceAdmin({
                 step="0.1"
                 value={kFactor}
                 onChange={(e) => setKFactor(parseFloat(e.target.value) || 2)}
-                className="w-full border-2 border-black p-1.5 text-xs font-black font-mono bg-white"
+                className="w-full border-2 border-black p-2 text-xs font-black font-mono bg-white"
               />
             </div>
           </div>
 
-          {/* Min Price Protection Limit */}
-          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3">
+          {/* Base Price Weight Control */}
+          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black uppercase tracking-widest text-black">
+                Base Price Weight (%)
+              </label>
+              <span className="bg-blue-100 text-blue-900 border border-blue-400 text-xs font-mono font-black px-2 py-0.5">
+                {basePriceWeight}% ({(basePriceWeight / 100).toFixed(2)})
+              </span>
+            </div>
+            <p className="text-[10px] font-bold text-neutral-600 uppercase">
+              Weight given to starting foundation price. Default = 40% (0.40).
+            </p>
+            <input 
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={basePriceWeight}
+              onChange={(e) => handleAutoBalanceWeights(parseInt(e.target.value))}
+              className="w-full accent-black cursor-pointer"
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={basePriceWeight}
+                onChange={(e) => handleAutoBalanceWeights(parseInt(e.target.value) || 0)}
+                className="w-full border-2 border-black p-2 text-xs font-black font-mono bg-white"
+              />
+              <span className="text-xs font-black">%</span>
+            </div>
+          </div>
+
+          {/* Transaction Price Weight Control */}
+          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black uppercase tracking-widest text-black">
+                Transaction Price Weight (%)
+              </label>
+              <span className="bg-amber-100 text-amber-900 border border-amber-400 text-xs font-mono font-black px-2 py-0.5">
+                {txPriceWeight}% ({(txPriceWeight / 100).toFixed(2)})
+              </span>
+            </div>
+            <p className="text-[10px] font-bold text-neutral-600 uppercase">
+              Weight given to actual completed purchase prices. Default = 60% (0.60).
+            </p>
+            <input 
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={txPriceWeight}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 0;
+                setTxPriceWeight(val);
+                setBasePriceWeight(100 - val);
+              }}
+              className="w-full accent-black cursor-pointer"
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={txPriceWeight}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 0;
+                  setTxPriceWeight(val);
+                  setBasePriceWeight(100 - val);
+                }}
+                className="w-full border-2 border-black p-2 text-xs font-black font-mono bg-white"
+              />
+              <span className="text-xs font-black">%</span>
+            </div>
+          </div>
+
+          {/* Transaction History Sample Size */}
+          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black uppercase tracking-widest text-black">
+                Transaction Sample Size
+              </label>
+              <span className="bg-black text-white text-xs font-mono font-black px-2 py-0.5">
+                Last {sampleSize} Sales
+              </span>
+            </div>
+            <p className="text-[10px] font-bold text-neutral-600 uppercase">
+              Number of latest completed transactions to average. Default = 20.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={sampleSize}
+                onChange={(e) => setSampleSize(Math.max(1, parseInt(e.target.value) || 20))}
+                className="w-full border-2 border-black p-2 text-xs font-black font-mono bg-white"
+              />
+              <span className="text-xs font-black">Sales</span>
+            </div>
+            <p className="text-[9px] font-bold text-neutral-500 font-mono">
+              If fewer exist, uses all available sales (trimmed outlier protection enabled).
+            </p>
+          </div>
+
+          {/* Minimum Price Protection Limit */}
+          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex items-center justify-between">
               <label className="text-xs font-black uppercase tracking-widest text-black">
                 Min Price Limit (%)
@@ -328,7 +614,7 @@ export function DynamicMarketPriceAdmin({
               </span>
             </div>
             <p className="text-[10px] font-bold text-neutral-600 uppercase">
-              Floor protection below Base Price. (Default = 50%).
+              Minimum floor relative to Base Price. Default = 50%.
             </p>
             <div className="flex items-center gap-2">
               <input
@@ -337,17 +623,17 @@ export function DynamicMarketPriceAdmin({
                 max="100"
                 value={minPricePercent}
                 onChange={(e) => setMinPricePercent(parseInt(e.target.value) || 50)}
-                className="w-full border-2 border-black p-1.5 text-xs font-black font-mono bg-white"
+                className="w-full border-2 border-black p-2 text-xs font-black font-mono bg-white"
               />
-              <span className="text-xs font-black">% of Base</span>
+              <span className="text-xs font-black">%</span>
             </div>
             <p className="text-[9px] font-bold text-neutral-500 font-mono">
-              e.g. 100 Base → Min {Math.round(100 * (minPricePercent / 100))} AC
+              e.g. 100 Base → Floor {Math.round(100 * (minPricePercent / 100))} AC
             </p>
           </div>
 
-          {/* Max Price Protection Limit */}
-          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3">
+          {/* Maximum Price Protection Limit */}
+          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
             <div className="flex items-center justify-between">
               <label className="text-xs font-black uppercase tracking-widest text-black">
                 Max Price Limit (%)
@@ -357,7 +643,7 @@ export function DynamicMarketPriceAdmin({
               </span>
             </div>
             <p className="text-[10px] font-bold text-neutral-600 uppercase">
-              Ceiling protection above Base Price. (Default = 500%).
+              Maximum ceiling relative to Base Price. Default = 500%.
             </p>
             <div className="flex items-center gap-2">
               <input
@@ -367,476 +653,416 @@ export function DynamicMarketPriceAdmin({
                 step="50"
                 value={maxPricePercent}
                 onChange={(e) => setMaxPricePercent(parseInt(e.target.value) || 500)}
-                className="w-full border-2 border-black p-1.5 text-xs font-black font-mono bg-white"
+                className="w-full border-2 border-black p-2 text-xs font-black font-mono bg-white"
               />
-              <span className="text-xs font-black">% of Base</span>
+              <span className="text-xs font-black">%</span>
             </div>
             <p className="text-[9px] font-bold text-neutral-500 font-mono">
-              e.g. 100 Base → Max {Math.round(100 * (maxPricePercent / 100))} AC
-            </p>
-          </div>
-
-          {/* Anti-Manipulation Limit */}
-          <div className="border-2 border-black p-4 bg-neutral-50 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-black uppercase tracking-widest text-black">
-                Max Buy Req / User
-              </label>
-              <span className="bg-black text-white text-xs font-mono font-black px-2 py-0.5">
-                {maxBuyRequestsPerUser}
-              </span>
-            </div>
-            <p className="text-[10px] font-bold text-neutral-600 uppercase">
-              Anti-manipulation cap per user to prevent artificial demand pumping.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={maxBuyRequestsPerUser}
-                onChange={(e) => setMaxBuyRequestsPerUser(parseInt(e.target.value) || 5)}
-                className="w-full border-2 border-black p-1.5 text-xs font-black font-mono bg-white"
-              />
-              <span className="text-xs font-black">Requests</span>
-            </div>
-            <p className="text-[9px] font-bold text-neutral-500 font-mono">
-              Limit 1 active request per card
+              e.g. 100 Base → Ceiling {Math.round(100 * (maxPricePercent / 100))} AC
             </p>
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: INTERACTIVE LIVE FORMULA SIMULATOR */}
+      {/* SECTION 2: INTERACTIVE LIVE FORMULA SANDBOX / SIMULATOR */}
       <div className="bg-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
         <div className="flex items-center justify-between border-b-2 border-black pb-4">
           <div className="flex items-center gap-2">
             <Calculator className="text-black" size={22} />
-            <h3 className="text-lg font-black uppercase tracking-tight text-black">
-              2. LIVE PRICING FORMULA SANDBOX & SIMULATOR
+            <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-black">
+              2. INTERACTIVE FORMULA SIMULATOR & STEP-BY-STEP BREAKDOWN
             </h3>
           </div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 bg-neutral-100 border border-black px-2.5 py-1">
-            TEST ANY SCENARIO IN REAL-TIME
+          <span className="text-[10px] font-black uppercase tracking-widest text-black bg-[#D4FF00] border border-black px-2.5 py-1">
+            TEST LIVE CALCULATIONS
           </span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          {/* Simulator Inputs (7 cols) */}
-          <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
-                Base Price
-              </label>
-              <input 
-                type="number"
-                min="1"
-                value={simBasePrice}
-                onChange={(e) => setSimBasePrice(Math.max(1, parseInt(e.target.value) || 100))}
-                className="w-full border-2 border-black p-2 text-sm font-black font-mono bg-white"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                Buy Requests
-              </label>
-              <input 
-                type="number"
-                min="0"
-                value={simBuyRequests}
-                onChange={(e) => setSimBuyRequests(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full border-2 border-emerald-600 p-2 text-sm font-black font-mono bg-emerald-50 text-emerald-900"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-indigo-700">
-                Sell Listings
-              </label>
-              <input 
-                type="number"
-                min="0"
-                value={simSellListings}
-                onChange={(e) => setSimSellListings(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full border-2 border-indigo-600 p-2 text-sm font-black font-mono bg-indigo-50 text-indigo-900"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
-                Total Active Users
-              </label>
-              <input 
-                type="number"
-                min="1"
-                value={simActiveUsers}
-                onChange={(e) => setSimActiveUsers(Math.max(1, parseInt(e.target.value) || 100))}
-                className="w-full border-2 border-black p-2 text-sm font-black font-mono bg-white"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-amber-700">
-                K Factor
-              </label>
-              <input 
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={simK}
-                onChange={(e) => setSimK(parseFloat(e.target.value) || 2)}
-                className="w-full border-2 border-amber-600 p-2 text-sm font-black font-mono bg-amber-50 text-amber-900"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
-                Min / Max Caps (%)
-              </label>
-              <div className="flex items-center gap-1">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Simulator Inputs (6 cols) */}
+          <div className="lg:col-span-6 space-y-4">
+            <h4 className="text-xs font-black uppercase tracking-wider text-neutral-500">
+              SIMULATION PARAMETERS:
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-black">
+                  Base Price (Coins)
+                </label>
                 <input 
                   type="number"
-                  value={simMinPercent}
-                  onChange={(e) => setSimMinPercent(parseInt(e.target.value) || 50)}
-                  className="w-1/2 border-2 border-black p-2 text-xs font-black font-mono bg-white"
-                  title="Min %"
-                />
-                <input 
-                  type="number"
-                  value={simMaxPercent}
-                  onChange={(e) => setSimMaxPercent(parseInt(e.target.value) || 500)}
-                  className="w-1/2 border-2 border-black p-2 text-xs font-black font-mono bg-white"
-                  title="Max %"
+                  min="1"
+                  value={simBasePrice}
+                  onChange={(e) => setSimBasePrice(Math.max(1, parseInt(e.target.value) || 100))}
+                  className="w-full border-2 border-black p-2 text-sm font-black font-mono bg-white"
                 />
               </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-black">
+                  Unique Owners (√Owners)
+                </label>
+                <input 
+                  type="number"
+                  min="1"
+                  value={simOwners}
+                  onChange={(e) => setSimOwners(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full border-2 border-black p-2 text-sm font-black font-mono bg-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-purple-700">
+                  K Sensitivity Factor
+                </label>
+                <input 
+                  type="number"
+                  min="0.1"
+                  step="0.5"
+                  value={simK}
+                  onChange={(e) => setSimK(parseFloat(e.target.value) || 2)}
+                  className="w-full border-2 border-purple-700 p-2 text-sm font-black font-mono bg-purple-50 text-purple-900"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+                  Avg Transaction Price
+                </label>
+                <input 
+                  type="number"
+                  min="1"
+                  value={simAvgTxPrice}
+                  onChange={(e) => setSimAvgTxPrice(Math.max(1, parseInt(e.target.value) || 100))}
+                  className="w-full border-2 border-amber-600 p-2 text-sm font-black font-mono bg-amber-50 text-amber-900"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-blue-700">
+                  Base Price Weight (%)
+                </label>
+                <input 
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={simBaseWeight}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setSimBaseWeight(val);
+                    setSimTxWeight(100 - val);
+                  }}
+                  className="w-full border-2 border-blue-700 p-2 text-sm font-black font-mono bg-blue-50 text-blue-900"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                  Tx Price Weight (%)
+                </label>
+                <input 
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={simTxWeight}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setSimTxWeight(val);
+                    setSimBaseWeight(100 - val);
+                  }}
+                  className="w-full border-2 border-emerald-700 p-2 text-sm font-black font-mono bg-emerald-50 text-emerald-900"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSimBasePrice(100);
+                  setSimOwners(25);
+                  setSimK(2);
+                  setSimAvgTxPrice(150);
+                  setSimBaseWeight(40);
+                  setSimTxWeight(60);
+                }}
+                className="bg-neutral-100 hover:bg-black hover:text-[#D4FF00] text-black border border-black px-3 py-1.5 text-[11px] font-black uppercase tracking-wider transition-colors"
+              >
+                Load User Example (100 Base, 25 Owners, 150 Avg Tx → 182 AC)
+              </button>
             </div>
           </div>
 
-          {/* Simulator Output Card (5 cols) */}
-          <div className="lg:col-span-5 bg-neutral-900 text-white border-2 border-black p-5 space-y-4 shadow-[4px_4px_0px_0px_#D4FF00]">
-            <div className="flex items-center justify-between">
+          {/* Simulator Live Output & Math Steps (6 cols) */}
+          <div className="lg:col-span-6 bg-black text-white p-6 border-4 border-black shadow-[6px_6px_0px_0px_#D4FF00] space-y-4">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#D4FF00]">
+                SIMULATION RESULT
+              </span>
+              <span className="text-xs font-mono font-black text-neutral-400">
+                {simResult.pctChange >= 0 ? `+${simResult.pctChange}%` : `${simResult.pctChange}%`} vs Base
+              </span>
+            </div>
+
+            <div className="space-y-1">
               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                CALCULATED OUTCOME
+                CALCULATED FINAL MARKET VALUE
               </span>
-              <span className={cn(
-                "px-2 py-0.5 border text-[9px] font-black uppercase font-mono flex items-center gap-1",
-                simResult.demand.badgeBg,
-                simResult.demand.badgeBorder
-              )}>
-                <span className={cn("w-1.5 h-1.5 rounded-full", simResult.demand.dotColor)} />
-                {simResult.demand.level} DEMAND ({simResult.demand.ratioText})
-              </span>
-            </div>
-
-            <div className="space-y-1 border-b border-neutral-800 pb-3">
-              <div className="text-3xl sm:text-4xl font-black text-[#D4FF00] font-mono tracking-tight">
-                {formatCurrency(simResult.finalP)}
-              </div>
-              <div className="flex items-center gap-2 text-xs font-mono">
-                <span className={simResult.diff >= 0 ? "text-emerald-400" : "text-rose-400"}>
-                  {simResult.diff >= 0 ? '+' : ''}{formatCurrency(simResult.diff)} ({simResult.pct >= 0 ? '+' : ''}{simResult.pct}%)
-                </span>
-                <span className="text-neutral-500">from {formatCurrency(simBasePrice)} base</span>
+              <div className="text-4xl sm:text-5xl font-black text-[#D4FF00] tracking-tight font-mono">
+                {formatCurrency(simResult.finalValue)}
               </div>
             </div>
 
-            {/* Formula Calculation Steps */}
-            <div className="space-y-1 text-[10px] font-mono text-neutral-300">
-              <p>
-                1. Net Demand = ({simBuyRequests} − {simSellListings}) ÷ {simActiveUsers} = <strong className="text-white font-black">{simResult.netDemand.toFixed(4)}</strong>
-              </p>
-              <p>
-                2. Factor = 1 + ({simResult.netDemand.toFixed(4)} × {simK}) = <strong className="text-white font-black">{simResult.factor.toFixed(4)}</strong>
-              </p>
-              <p>
-                3. Raw Price = {simBasePrice} × {simResult.factor.toFixed(4)} = <strong className="text-white font-black">{formatCurrency(simResult.rawCalculated)}</strong>
-              </p>
-              <p>
-                4. Protection Limits: [{formatCurrency(simResult.minP)} min .. {formatCurrency(simResult.maxP)} max]
-                {simResult.isMinCapped && <span className="text-rose-400 font-bold ml-1">(CAPPED AT MIN)</span>}
-                {simResult.isMaxCapped && <span className="text-amber-400 font-bold ml-1">(CAPPED AT MAX)</span>}
-              </p>
+            {/* Formula Math Steps Breakdown */}
+            <div className="space-y-2 pt-2 border-t border-neutral-800 text-xs font-mono">
+              <div className="bg-neutral-900 p-2.5 border border-neutral-800 space-y-1">
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Step 1: Scarcity Factor</p>
+                <p className="text-white">
+                  1 + ({simK} / √{simOwners}) = 1 + ({simK} / {simResult.sqrtOwners}) = <strong className="text-[#D4FF00]">{simResult.scarcityFactor}</strong>
+                </p>
+              </div>
+
+              <div className="bg-neutral-900 p-2.5 border border-neutral-800 space-y-1">
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Step 2: Transaction Factor</p>
+                <p className="text-white">
+                  {(simBaseWeight / 100).toFixed(2)} + ({(simTxWeight / 100).toFixed(2)} × {simAvgTxPrice} / {simBasePrice}) = <strong className="text-[#D4FF00]">{simResult.txFactor}</strong>
+                </p>
+              </div>
+
+              <div className="bg-neutral-900 p-2.5 border border-neutral-800 space-y-1">
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Step 3: Raw Value & Bounds</p>
+                <p className="text-white">
+                  {simBasePrice} × {simResult.scarcityFactor} × {simResult.txFactor} = <strong className="text-white">{simResult.rawValue} AC</strong>
+                </p>
+                <p className="text-[10px] text-neutral-400">
+                  Protected between {simResult.minP} AC (min) and {simResult.maxP} AC (max) → <strong>{simResult.finalValue} AC</strong>
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* SECTION 3: ALL CARDS DYNAMIC MARKET PRICE TABLE & CUSTOM OVERRIDES */}
+      {/* SECTION 3: REAL-TIME CARDS VALUATION LEDGER TABLE */}
       <div className="bg-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b-2 border-black pb-4">
           <div>
-            <h3 className="text-lg font-black uppercase tracking-tight text-black">
-              3. CATALOG DYNAMIC PRICING OVERVIEW ({filteredCardCalculations.length})
-            </h3>
-            <p className="text-[10px] font-bold text-neutral-500 uppercase">
-              REAL-TIME CALCULATED MARKET PRICES FOR ALL CARDS BASED ON LIVE BUY/SELL DEMAND
+            <div className="flex items-center gap-2">
+              <Coins className="text-black" size={22} />
+              <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-black">
+                3. LIVE CARD VALUATIONS & SCARCITY AUDIT LEDGER
+              </h3>
+            </div>
+            <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider mt-0.5">
+              Live calculated market values across all {cards.length} database cards based on current unique owners and completed transactions.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <input 
-              type="text"
-              placeholder="Search player / team..."
-              value={cardSearch}
-              onChange={(e) => setCardSearch(e.target.value)}
-              className="border-2 border-black px-3 py-1.5 text-xs font-bold bg-white"
-            />
+          {/* Search & Filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={14} />
+              <input
+                type="text"
+                placeholder="SEARCH PLAYER, TEAM, #"
+                value={cardSearch}
+                onChange={(e) => setCardSearch(e.target.value)}
+                className="pl-8 pr-3 py-1.5 text-xs font-black uppercase border-2 border-black w-48 sm:w-60"
+              />
+            </div>
             <select
-              value={filterDemand}
-              onChange={(e) => setFilterDemand(e.target.value)}
-              className="border-2 border-black px-3 py-1.5 text-xs font-black bg-white"
+              value={filterRarity}
+              onChange={(e) => setFilterRarity(e.target.value)}
+              className="px-3 py-1.5 text-xs font-black uppercase border-2 border-black bg-white"
             >
-              <option value="all">ALL DEMAND LEVELS</option>
-              <option value="VERY HIGH">VERY HIGH DEMAND</option>
-              <option value="HIGH">HIGH DEMAND</option>
-              <option value="NORMAL">NORMAL DEMAND</option>
-              <option value="LOW">LOW DEMAND</option>
-              <option value="VERY LOW">VERY LOW DEMAND</option>
+              <option value="all">ALL RARITIES</option>
+              <option value="Base">BASE</option>
+              <option value="Silver Refractor">SILVER REFRACTOR</option>
+              <option value="Gold Autograph">GOLD AUTOGRAPH</option>
+              <option value="1-of-1 Shield">1-OF-1 SHIELD</option>
             </select>
           </div>
         </div>
 
-        {/* Cards Table */}
+        {/* Valuation Table */}
         <div className="overflow-x-auto border-2 border-black">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-black text-[#D4FF00] font-black uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="p-3 border-r border-neutral-800">CARD / PLAYER</th>
-                <th className="p-3 border-r border-neutral-800 text-right">BASE PRICE</th>
-                <th className="p-3 border-r border-neutral-800 text-center">BUY REQ</th>
-                <th className="p-3 border-r border-neutral-800 text-center">SELL LIST</th>
-                <th className="p-3 border-r border-neutral-800 text-center">DEMAND LEVEL</th>
-                <th className="p-3 border-r border-neutral-800 text-right">DYNAMIC PRICE</th>
-                <th className="p-3 border-r border-neutral-800 text-right">CHANGE</th>
-                <th className="p-3 text-center">ACTIONS</th>
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-black text-white uppercase text-[10px] tracking-wider border-b-2 border-black font-mono">
+                <th className="p-3">CARD / PLAYER</th>
+                <th className="p-3">RARITY</th>
+                <th className="p-3 text-right">BASE PRICE</th>
+                <th className="p-3 text-center">OWNERS (√)</th>
+                <th className="p-3 text-center">SCARCITY FACTOR</th>
+                <th className="p-3 text-center">AVG TX PRICE (HIST)</th>
+                <th className="p-3 text-center">TX FACTOR</th>
+                <th className="p-3 text-right">LIVE MARKET VALUE</th>
+                <th className="p-3 text-center">ACTION</th>
               </tr>
             </thead>
-            <tbody className="divide-y-2 divide-black font-mono">
-              {filteredCardCalculations.map(({ card, calc }) => (
-                <tr key={card.id} className="hover:bg-neutral-50 transition-colors">
-                  <td className="p-3 font-sans font-black border-r border-black">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-neutral-400 uppercase font-mono">{card.cardNumber}</span>
-                      <span className="uppercase text-sm">{card.player}</span>
-                      <span className="text-[9px] px-1.5 py-0.2 bg-neutral-100 border border-neutral-400 uppercase font-mono">
-                        {card.rarity}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-right font-black border-r border-black">
-                    {formatCurrency(calc.basePrice)}
-                  </td>
-                  <td className="p-3 text-center font-black text-emerald-700 bg-emerald-50/50 border-r border-black">
-                    {calc.buyRequestsCount}
-                  </td>
-                  <td className="p-3 text-center font-black text-indigo-700 bg-indigo-50/50 border-r border-black">
-                    {calc.sellListingsCount}
-                  </td>
-                  <td className="p-3 text-center border-r border-black">
-                    <span className={cn(
-                      "px-2 py-0.5 border text-[9px] font-black uppercase font-mono inline-flex items-center gap-1",
-                      calc.demand.badgeBg,
-                      calc.demand.badgeBorder
-                    )}>
-                      <span className={cn("w-1.5 h-1.5 rounded-full", calc.demand.dotColor)} />
-                      {calc.demand.level}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right font-black text-sm border-r border-black bg-[#D4FF00]/10">
-                    {formatCurrency(calc.finalPrice)}
-                  </td>
-                  <td className="p-3 text-right font-black border-r border-black">
-                    <span className={cn(
-                      "px-1.5 py-0.5 border text-[9px] inline-flex items-center gap-0.5",
-                      calc.priceChange.trend === 'up'
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                        : calc.priceChange.trend === 'down'
-                        ? "bg-rose-50 text-rose-700 border-rose-300"
-                        : "bg-neutral-100 text-neutral-600 border-neutral-300"
-                    )}>
-                      {calc.priceChange.trend === 'up' ? <TrendingUp size={10} /> : calc.priceChange.trend === 'down' ? <TrendingDown size={10} /> : null}
-                      {calc.priceChange.formattedPercentage}
-                    </span>
-                  </td>
-                  <td className="p-3 text-center font-sans">
-                    <button
-                      onClick={() => handleOpenCardEdit(card)}
-                      className="bg-black hover:bg-[#D4FF00] hover:text-black text-[#D4FF00] px-2.5 py-1 text-[10px] font-black uppercase tracking-wider border border-black transition-colors"
-                    >
-                      EDIT OVERRIDES
-                    </button>
+            <tbody className="divide-y divide-black font-mono">
+              {filteredCardCalculations.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-neutral-500 font-bold uppercase">
+                    No matching cards found.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredCardCalculations.map(({ card, calc, owners, txPricesCount }) => {
+                  const isPositive = calc.priceChangeDiff >= 0;
+                  return (
+                    <tr key={card.id} className="hover:bg-neutral-50 transition-colors">
+                      {/* Card / Player */}
+                      <td className="p-3 font-sans">
+                        <div className="flex items-center gap-2">
+                          {card.imageUrl ? (
+                            <img src={card.imageUrl} alt={card.player} className="w-8 h-10 object-cover border border-black" />
+                          ) : (
+                            <div className="w-8 h-10 bg-neutral-200 border border-black flex items-center justify-center font-bold text-[9px]">
+                              #{card.cardNumber}
+                            </div>
+                          )}
+                          <div>
+                            <span className="font-black text-black block leading-tight">{card.player}</span>
+                            <span className="text-[10px] font-bold text-neutral-500 uppercase">
+                              {card.team} • #{card.cardNumber}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Rarity */}
+                      <td className="p-3 font-sans">
+                        <span className={cn(
+                          "px-2 py-0.5 text-[9px] font-black uppercase border border-black inline-block",
+                          card.rarity === 'Base' && "bg-white text-black",
+                          card.rarity === 'Silver Refractor' && "bg-slate-200 text-black",
+                          card.rarity === 'Gold Autograph' && "bg-amber-300 text-black",
+                          card.rarity === '1-of-1 Shield' && "bg-black text-[#D4FF00]"
+                        )}>
+                          {card.rarity}
+                        </span>
+                      </td>
+
+                      {/* Base Price */}
+                      <td className="p-3 text-right font-black text-black">
+                        {formatCurrency(calc.basePrice)}
+                      </td>
+
+                      {/* Unique Owners */}
+                      <td className="p-3 text-center">
+                        <span className="bg-neutral-100 border border-black px-2 py-0.5 text-xs font-black">
+                          {owners} {owners === 1 ? 'user' : 'users'}
+                        </span>
+                      </td>
+
+                      {/* Scarcity Factor */}
+                      <td className="p-3 text-center">
+                        <span className="font-black text-purple-700 bg-purple-50 px-2 py-0.5 border border-purple-300">
+                          {calc.scarcityFactor.toFixed(3)}x
+                        </span>
+                      </td>
+
+                      {/* Avg Tx Price */}
+                      <td className="p-3 text-center">
+                        {calc.hasTransactionHistory ? (
+                          <div className="text-[11px]">
+                            <span className="font-black text-black">{formatCurrency(calc.averageTransactionPrice)}</span>
+                            <span className="text-[9px] text-neutral-500 block">({txPricesCount} sales)</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-bold text-neutral-500 uppercase bg-neutral-100 px-2 py-0.5 border border-neutral-300">
+                            Base Default ({calc.basePrice} AC)
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Tx Factor */}
+                      <td className="p-3 text-center">
+                        <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 border border-blue-300">
+                          {calc.transactionFactor.toFixed(3)}x
+                        </span>
+                      </td>
+
+                      {/* Live Market Value */}
+                      <td className="p-3 text-right">
+                        <div className="font-black text-sm text-black">
+                          {formatCurrency(calc.finalMarketValue)}
+                        </div>
+                        <div className={cn(
+                          "text-[10px] font-bold",
+                          isPositive ? "text-emerald-600" : "text-rose-600"
+                        )}>
+                          {isPositive ? '+' : ''}{calc.priceChangePercentage}%
+                        </div>
+                      </td>
+
+                      {/* Action */}
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCardEdit(card)}
+                          className="bg-white hover:bg-black hover:text-[#D4FF00] text-black border border-black px-2.5 py-1 text-[10px] font-black uppercase tracking-wider transition-colors"
+                        >
+                          EDIT BASE / K
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL: PER-CARD PRICING OVERRIDES */}
-      {selectedCardForEdit && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-black p-6 sm:p-8 max-w-lg w-full shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] space-y-6 animate-scaleUp">
-            <div className="flex items-center justify-between border-b-2 border-black pb-4">
-              <div>
-                <h3 className="text-xl font-black uppercase tracking-tight text-black">
-                  PRICING OVERRIDES: {selectedCardForEdit.player}
-                </h3>
-                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500 font-mono">
-                  {selectedCardForEdit.cardNumber} • {selectedCardForEdit.team} • {selectedCardForEdit.rarity}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedCardForEdit(null)}
-                className="text-neutral-500 hover:text-black font-black"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase tracking-widest text-black">
-                  Base Starting Price (AC)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={cardBasePriceInput}
-                  onChange={(e) => setCardBasePriceInput(Math.max(1, parseInt(e.target.value) || 100))}
-                  className="w-full border-2 border-black p-2 font-mono font-black text-sm bg-white"
-                />
-                <p className="text-[9px] font-bold text-neutral-500 uppercase">
-                  Fixed mint price from which demand multipliers scale.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-black uppercase tracking-widest text-black">
-                    Custom K Factor
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    placeholder={`Global (${kFactor})`}
-                    value={cardCustomKInput}
-                    onChange={(e) => setCardCustomKInput(e.target.value)}
-                    className="w-full border-2 border-black p-2 font-mono font-black text-sm bg-white"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-black uppercase tracking-widest text-black">
-                    Min Price Override
-                  </label>
-                  <input
-                    type="number"
-                    placeholder={`Auto (${Math.round(cardBasePriceInput * (minPricePercent / 100))})`}
-                    value={cardMinPriceInput}
-                    onChange={(e) => setCardMinPriceInput(e.target.value)}
-                    className="w-full border-2 border-black p-2 font-mono font-black text-sm bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-black uppercase tracking-widest text-black">
-                  Max Price Override
-                </label>
-                <input
-                  type="number"
-                  placeholder={`Auto (${Math.round(cardBasePriceInput * (maxPricePercent / 100))})`}
-                  value={cardMaxPriceInput}
-                  onChange={(e) => setCardMaxPriceInput(e.target.value)}
-                  className="w-full border-2 border-black p-2 font-mono font-black text-sm bg-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-4 border-t-2 border-black">
-              <button
-                type="button"
-                onClick={() => setSelectedCardForEdit(null)}
-                className="px-4 py-2 border-2 border-black font-black uppercase text-xs hover:bg-neutral-100"
-              >
-                CANCEL
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveCardPricing}
-                disabled={isSavingCard}
-                className="px-6 py-2 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] border-2 border-black font-black uppercase text-xs transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] disabled:opacity-50"
-              >
-                {isSavingCard ? 'SAVING...' : 'SAVE OVERRIDES'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SECTION 4: PRICE AUDIT HISTORY LOGS */}
+      {/* SECTION 4: COMPLETED TRANSACTIONS LEDGER (SOURCE OF TRANSACTION DATA) */}
       <div className="bg-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
         <div className="flex items-center justify-between border-b-2 border-black pb-4">
           <div className="flex items-center gap-2">
             <History className="text-black" size={22} />
-            <h3 className="text-lg font-black uppercase tracking-tight text-black">
-              4. PRICE AUDIT & DEMAND HISTORY LOGS ({priceHistoryLogs.length})
+            <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-black">
+              4. COMPLETED TRANSACTIONS LEDGER (SAMPLE POOL)
             </h3>
           </div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 font-mono">
-            AUTOMATIC LOGS RECORDED ON DEMAND CHANGES
+          <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500 bg-neutral-100 border border-black px-2.5 py-1">
+            {recentTransactions.length} RECORDED COMPLETED SALES
           </span>
         </div>
 
-        {loadingLogs ? (
-          <div className="p-8 text-center text-xs font-black uppercase tracking-widest text-neutral-500 animate-pulse">
-            LOADING AUDIT LOGS...
-          </div>
-        ) : priceHistoryLogs.length === 0 ? (
-          <div className="p-8 text-center text-xs font-black uppercase tracking-widest text-neutral-400 border-2 border-dashed border-neutral-300">
-            NO PRICE HISTORY LOGS RECORDED YET. LOGS WILL POPULATE AUTOMATICALLY WHEN BUY REQUESTS OR LISTINGS SHIFT CARD PRICES.
-          </div>
+        {recentTransactions.length === 0 ? (
+          <p className="text-xs font-bold text-neutral-500 uppercase">
+            No completed market transactions logged yet. All cards currently default to (Average Transaction Price = Base Price) with Transaction Factor = 1.0.
+          </p>
         ) : (
-          <div className="overflow-x-auto border-2 border-black max-h-96">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-neutral-100 text-black font-black uppercase tracking-wider text-[10px] sticky top-0">
+          <div className="overflow-x-auto border-2 border-black max-h-72">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead className="sticky top-0 bg-black text-white uppercase text-[10px] tracking-wider font-mono">
                 <tr>
-                  <th className="p-2.5 border-b-2 border-black">TIMESTAMP</th>
-                  <th className="p-2.5 border-b-2 border-black">PLAYER / CARD</th>
-                  <th className="p-2.5 border-b-2 border-black text-right">OLD PRICE</th>
-                  <th className="p-2.5 border-b-2 border-black text-right">NEW PRICE</th>
-                  <th className="p-2.5 border-b-2 border-black text-right">CHANGE</th>
-                  <th className="p-2.5 border-b-2 border-black text-center">DEMAND (B / S)</th>
-                  <th className="p-2.5 border-b-2 border-black">REASON</th>
+                  <th className="p-3">DATE / TIME</th>
+                  <th className="p-3">CARD</th>
+                  <th className="p-3">TYPE</th>
+                  <th className="p-3">DESCRIPTION</th>
+                  <th className="p-3 text-right">PRICE (COINS)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-200 font-mono text-[11px]">
-                {priceHistoryLogs.map((log) => (
-                  <tr key={log.id || `${log.timestamp}-${log.cardId}`} className="hover:bg-neutral-50">
-                    <td className="p-2.5 text-neutral-500">
-                      {new Date(log.timestamp).toLocaleString()}
+              <tbody className="divide-y divide-black font-mono">
+                {recentTransactions.slice(0, 25).map(tx => (
+                  <tr key={tx.id} className="hover:bg-neutral-50">
+                    <td className="p-3 text-neutral-500 text-[10px]">
+                      {new Date(tx.timestamp).toLocaleString()}
                     </td>
-                    <td className="p-2.5 font-sans font-black uppercase">
-                      {log.playerName || log.cardId}
+                    <td className="p-3 font-black text-black font-sans">
+                      {tx.cardName || tx.cardId || 'Market Item'}
                     </td>
-                    <td className="p-2.5 text-right font-black">
-                      {formatCurrency(log.oldPrice)}
-                    </td>
-                    <td className="p-2.5 text-right font-black text-black bg-[#D4FF00]/10">
-                      {formatCurrency(log.newPrice)}
-                    </td>
-                    <td className="p-2.5 text-right font-black">
-                      <span className={log.changePercentage >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                        {log.changePercentage >= 0 ? '+' : ''}{log.changePercentage}%
+                    <td className="p-3">
+                      <span className="bg-[#D4FF00] text-black px-2 py-0.5 text-[9px] font-black uppercase border border-black">
+                        {tx.type}
                       </span>
                     </td>
-                    <td className="p-2.5 text-center font-black">
-                      <span className="text-emerald-700">{log.buyRequests} B</span> / <span className="text-indigo-700">{log.sellListings} S</span>
-                    </td>
-                    <td className="p-2.5 font-sans font-bold text-neutral-600 uppercase">
-                      {log.reason || 'demand_change'}
+                    <td className="p-3 text-neutral-600 font-sans">{tx.description}</td>
+                    <td className="p-3 text-right font-black text-emerald-600">
+                      {formatCurrency(Math.abs(tx.amount))}
                     </td>
                   </tr>
                 ))}
@@ -845,6 +1071,105 @@ export function DynamicMarketPriceAdmin({
           </div>
         )}
       </div>
+
+      {/* PER-CARD EDIT MODAL */}
+      {selectedCardForEdit && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-black p-6 w-full max-w-lg space-y-5 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+            <div className="flex items-center justify-between border-b-2 border-black pb-3">
+              <div>
+                <h4 className="text-xl font-black uppercase tracking-tight">
+                  EDIT CARD BASE PRICE & K
+                </h4>
+                <p className="text-xs font-bold text-neutral-500 uppercase">
+                  {selectedCardForEdit.player} • {selectedCardForEdit.rarity}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCardForEdit(null)}
+                className="text-black hover:text-red-600 text-xl font-black"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase tracking-widest text-black">
+                  Base Starting Price (Coins)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={cardBasePriceInput}
+                  onChange={(e) => setCardBasePriceInput(Math.max(1, parseInt(e.target.value) || 100))}
+                  className="w-full border-2 border-black p-2 text-sm font-black font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase tracking-widest text-purple-700">
+                  Custom Card K Factor (Leave blank for global {kFactor})
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder={`Default: ${kFactor}`}
+                  value={cardCustomKInput}
+                  onChange={(e) => setCardCustomKInput(e.target.value)}
+                  className="w-full border-2 border-purple-700 p-2 text-sm font-black font-mono bg-purple-50"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                    Min Price Override
+                  </label>
+                  <input
+                    type="number"
+                    placeholder={`e.g. ${Math.round(cardBasePriceInput * 0.5)}`}
+                    value={cardMinPriceInput}
+                    onChange={(e) => setCardMinPriceInput(e.target.value)}
+                    className="w-full border-2 border-black p-2 text-xs font-black font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-600">
+                    Max Price Override
+                  </label>
+                  <input
+                    type="number"
+                    placeholder={`e.g. ${Math.round(cardBasePriceInput * 5.0)}`}
+                    value={cardMaxPriceInput}
+                    onChange={(e) => setCardMaxPriceInput(e.target.value)}
+                    className="w-full border-2 border-black p-2 text-xs font-black font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t-2 border-black">
+              <button
+                type="button"
+                onClick={() => setSelectedCardForEdit(null)}
+                className="px-4 py-2 border-2 border-black text-xs font-black uppercase tracking-widest bg-white hover:bg-neutral-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCardPricing}
+                disabled={isSavingCard}
+                className="px-5 py-2 border-2 border-black text-xs font-black uppercase tracking-widest bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] transition-colors"
+              >
+                {isSavingCard ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

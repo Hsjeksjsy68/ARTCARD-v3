@@ -189,10 +189,14 @@ export interface BuyRequest {
 }
 
 export interface MarketSettings {
-  defaultK: number; // Default demand sensitivity factor, default 2
+  defaultK: number; // Default demand sensitivity factor / Scarcity K factor (default 2)
+  kFactor?: number; // Alias for defaultK
+  basePriceWeight: number; // Base Price weight (default 0.40 or 40%)
+  transactionPriceWeight: number; // Transaction Price weight (default 0.60 or 60%)
+  transactionSampleSize: number; // Sample size of latest transactions to average (default 20)
   minPricePercentage: number; // Default 50%
   maxPricePercentage: number; // Default 500%
-  maxBuyRequestsPerUser: number; // Default 5
+  maxBuyRequestsPerUser?: number; // Default 5
   updatedAt?: number;
   priceUpdateFrequency?: string;
   demandThresholds?: {
@@ -202,6 +206,27 @@ export interface MarketSettings {
     high: number; // 1.5 - 2.49
     veryHigh: number; // >= 2.5
   };
+}
+
+export interface MarketValueCalculation {
+  basePrice: number;
+  uniqueOwners: number;
+  scarcityFactor: number;
+  completedTransactionsCount: number;
+  averageTransactionPrice: number;
+  hasTransactionHistory: boolean;
+  basePriceWeight: number;
+  transactionPriceWeight: number;
+  transactionFactor: number;
+  k: number;
+  calculatedRawValue: number;
+  finalMarketValue: number;
+  minAllowedPrice: number;
+  maxAllowedPrice: number;
+  isCappedMin: boolean;
+  isCappedMax: boolean;
+  priceChangeDiff: number;
+  priceChangePercentage: number;
 }
 
 export interface PriceHistoryRecord {
