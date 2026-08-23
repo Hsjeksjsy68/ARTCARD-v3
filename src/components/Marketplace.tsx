@@ -1274,317 +1274,390 @@ export function Marketplace({
         </div>
       )}
 
-      {/* Tab 2: Sell Vault Card (with search, filter, and multiple duplicates display) */}
+      {/* Tab 2: Sell Vault Card (with search, filter, and selected card on the right side) */}
       {activeMarketTab === 'sell' && (
-        <div className="space-y-8">
-          <div className="bg-white border-3 border-black p-6 sm:p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between border-b-2 border-black pb-4 gap-4">
-              <div>
-                <h3 className="text-2xl font-black uppercase tracking-tight text-black flex items-center gap-2">
-                  <Tag size={24} /> SELECT A CARD FROM YOUR VAULT TO SELL
-                </h3>
-                <p className="text-neutral-500 text-xs font-bold uppercase tracking-wider mt-1">
-                  Every duplicate copy is listed individually. Search and filter your vault to easily find the card you want to list.
-                </p>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8 items-start">
+          {/* Left Column: Vault Cards Selector */}
+          <div className="lg:col-span-7 xl:col-span-7 space-y-6">
+            <div className="bg-white border-3 border-black p-5 sm:p-7 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b-2 border-black pb-4 gap-3">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-black flex items-center gap-2">
+                    <Tag size={22} /> SELECT A CARD FROM YOUR VAULT
+                  </h3>
+                  <p className="text-neutral-500 text-xs font-bold uppercase tracking-wider mt-1">
+                    Click any card or duplicate from your vault to configure its listing on the right panel.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="bg-[#D4FF00] text-black border border-black px-3 py-1 text-xs font-black uppercase font-mono shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    {availableVaultCardItems.length} UNLISTED CARDS
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#D4FF00] text-black border border-black px-3 py-1 text-xs font-black uppercase font-mono">
-                  {availableVaultCardItems.length} UNLISTED CARDS
-                </span>
-              </div>
-            </div>
 
-            {/* Easy Search and Filter Controls for Sell Tab */}
-            <div className="bg-neutral-50 border-2 border-black p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Search Bar */}
-                <div className="relative sm:col-span-2">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                  <input
-                    type="text"
-                    placeholder="EASY SEARCH: PLAYER, CLUB, NATION, #..."
-                    value={sellSearchQuery}
-                    onChange={(e) => setSellSearchQuery(e.target.value)}
-                    className="w-full bg-white border-2 border-black pl-9 pr-8 py-2 text-xs font-black uppercase focus:outline-none focus:border-[#D4FF00]"
-                  />
-                  {sellSearchQuery && (
+              {/* Easy Search and Filter Controls for Sell Tab */}
+              <div className="bg-neutral-50 border-2 border-black p-3.5 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Search Bar */}
+                  <div className="relative sm:col-span-2">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                    <input
+                      type="text"
+                      placeholder="SEARCH: PLAYER, CLUB, NATION, #..."
+                      value={sellSearchQuery}
+                      onChange={(e) => setSellSearchQuery(e.target.value)}
+                      className="w-full bg-white border-2 border-black pl-8 pr-8 py-2 text-xs font-black uppercase focus:outline-none focus:border-[#D4FF00]"
+                    />
+                    {sellSearchQuery && (
+                      <button
+                        onClick={() => setSellSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Sort dropdown */}
+                  <select
+                    value={sellSortBy}
+                    onChange={(e) => setSellSortBy(e.target.value as any)}
+                    className="bg-white border-2 border-black p-2 text-xs font-black uppercase focus:outline-none"
+                  >
+                    <option value="most-owned">SORT: MOST DUPLICATES</option>
+                    <option value="price-desc">SORT: HIGHEST VALUE</option>
+                    <option value="price-asc">SORT: LOWEST VALUE</option>
+                    <option value="player-asc">SORT: PLAYER (A-Z)</option>
+                  </select>
+                </div>
+
+                {/* Rarity Quick Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-neutral-200">
+                  <span className="text-[9px] font-black uppercase text-neutral-500 mr-1">RARITY:</span>
+                  {[
+                    { label: 'ALL', val: '' },
+                    { label: '1-OF-1', val: '1-of-1 Shield' },
+                    { label: 'GOLD', val: 'Gold Autograph' },
+                    { label: 'SILVER', val: 'Silver Refractor' },
+                    { label: 'BASE', val: 'Base' }
+                  ].map(r => (
                     <button
-                      onClick={() => setSellSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black"
+                      key={r.label}
+                      onClick={() => setSellFilterRarity(r.val)}
+                      className={cn(
+                        "px-2 py-0.5 text-[9px] font-black uppercase border transition-colors",
+                        sellFilterRarity === r.val
+                          ? "bg-black text-[#D4FF00] border-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]"
+                          : "bg-white text-black border-neutral-300 hover:border-black"
+                      )}
                     >
-                      <X size={14} />
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Unlisted Vault Cards Grid */}
+              {filteredAvailableVaultCards.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5">
+                  {filteredAvailableVaultCards.map((item) => {
+                    const { card, copyNumber, totalOwned, instanceKey } = item;
+                    const isSelected = selectedVaultCard?.id === card.id;
+                    return (
+                      <div
+                        key={instanceKey}
+                        onClick={() => {
+                          setSelectedVaultCard(card);
+                          setSelectedVaultCopyNumber(copyNumber);
+                          setSellQuantity(1);
+                          const mPrice = calculateCardMarketPrice(card, listings);
+                          setSellPriceInput(mPrice || card.currentPrice || 100);
+                        }}
+                        className={cn(
+                          "p-2.5 border-2 border-black cursor-pointer transition-all flex flex-col justify-between relative shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]",
+                          isSelected
+                            ? "bg-black text-white ring-4 ring-[#D4FF00] scale-[1.02] z-10 shadow-[4px_4px_0px_0px_#D4FF00]"
+                            : "bg-white hover:bg-neutral-50 hover:translate-y-[-2px]"
+                        )}
+                      >
+                        <div className="aspect-[750/1050] bg-white border border-black overflow-hidden mb-2 relative">
+                          <img src={card.imageUrl} alt={card.player} className="w-full h-full object-cover" />
+                          {totalOwned > 1 && (
+                            <div className="absolute top-1 right-1 bg-black text-[#D4FF00] px-1.5 py-0.5 text-[8px] font-black border border-black uppercase">
+                              COPY #{copyNumber}/{totalOwned}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={cn(
+                              "text-[8px] font-black uppercase px-1 py-0.2 border truncate",
+                              isSelected ? "bg-[#D4FF00] text-black border-black" : "bg-neutral-100 text-neutral-800 border-black/30"
+                            )}>
+                              {card.rarity}
+                            </span>
+                            {totalOwned > 1 && (
+                              <span className="text-[8px] font-black text-neutral-400 uppercase shrink-0">
+                                #{copyNumber}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs font-black uppercase truncate">{card.player}</div>
+                          <div className="text-[9px] font-bold text-neutral-400 uppercase truncate">{card.team}</div>
+                          <div className={cn(
+                            "text-xs font-black font-mono pt-0.5",
+                            isSelected ? "text-[#D4FF00]" : "text-black"
+                          )}>
+                            {formatCurrency(card.currentPrice)}
+                          </div>
+                        </div>
+
+                        <div className="mt-2.5">
+                          <button
+                            type="button"
+                            className={cn(
+                              "w-full py-1 text-[9px] font-black uppercase border border-black transition-colors",
+                              isSelected
+                                ? "bg-[#D4FF00] text-black font-black"
+                                : "bg-black text-[#D4FF00] hover:bg-neutral-800"
+                            )}
+                          >
+                            {isSelected ? 'SELECTED ✓' : 'SELECT TO SELL'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center space-y-3">
+                  <Trophy size={40} className="mx-auto text-neutral-400" />
+                  <h4 className="text-lg font-black uppercase tracking-tight text-black">
+                    {sellSearchQuery || sellFilterRarity ? 'NO MATCHING VAULT CARDS' : 'NO UNLISTED VAULT CARDS'}
+                  </h4>
+                  <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider max-w-sm mx-auto">
+                    {sellSearchQuery || sellFilterRarity 
+                      ? 'No unlisted cards in your vault match your current search or rarity filter. Try clearing the filter.' 
+                      : "You don't have any unlisted cards in your Vault right now. Buy cards on the Transfer Market or open booster packs to collect cards!"}
+                  </p>
+                  {(sellSearchQuery || sellFilterRarity) && (
+                    <button
+                      onClick={() => {
+                        setSellSearchQuery('');
+                        setSellFilterRarity('');
+                      }}
+                      className="bg-black text-[#D4FF00] px-4 py-1.5 text-xs font-black uppercase"
+                    >
+                      CLEAR FILTERS
                     </button>
                   )}
                 </div>
-
-                {/* Sort dropdown */}
-                <select
-                  value={sellSortBy}
-                  onChange={(e) => setSellSortBy(e.target.value as any)}
-                  className="bg-white border-2 border-black p-2 text-xs font-black uppercase focus:outline-none"
-                >
-                  <option value="most-owned">SORT: MOST DUPLICATES OWNED</option>
-                  <option value="price-desc">SORT: HIGHEST MARKET VALUE</option>
-                  <option value="price-asc">SORT: LOWEST MARKET VALUE</option>
-                  <option value="player-asc">SORT: PLAYER NAME (A-Z)</option>
-                </select>
-              </div>
-
-              {/* Rarity Quick Filter Pills */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-neutral-200">
-                <span className="text-[10px] font-black uppercase text-neutral-500 mr-1">FILTER RARITY:</span>
-                {[
-                  { label: 'ALL RARITIES', val: '' },
-                  { label: '1-OF-1 SHIELD', val: '1-of-1 Shield' },
-                  { label: 'GOLD AUTOGRAPH', val: 'Gold Autograph' },
-                  { label: 'SILVER REFRACTOR', val: 'Silver Refractor' },
-                  { label: 'BASE', val: 'Base' }
-                ].map(r => (
-                  <button
-                    key={r.label}
-                    onClick={() => setSellFilterRarity(r.val)}
-                    className={cn(
-                      "px-2.5 py-1 text-[10px] font-black uppercase border transition-colors",
-                      sellFilterRarity === r.val
-                        ? "bg-black text-[#D4FF00] border-black"
-                        : "bg-white text-black border-neutral-300 hover:border-black"
-                    )}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
-
-            {/* Unlisted Vault Cards Grid */}
-            {filteredAvailableVaultCards.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {filteredAvailableVaultCards.map((item) => {
-                  const { card, copyNumber, totalOwned, instanceKey } = item;
-                  const isSelected = selectedVaultCard?.id === card.id;
-                  return (
-                    <div
-                      key={instanceKey}
-                      onClick={() => {
-                        setSelectedVaultCard(card);
-                        setSelectedVaultCopyNumber(copyNumber);
-                        setSellQuantity(1);
-                        setSellPriceInput(card.currentPrice || 100);
-                      }}
-                      className={cn(
-                        "p-3 border-2 border-black cursor-pointer transition-all flex flex-col justify-between relative shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]",
-                        isSelected
-                          ? "bg-black text-white ring-4 ring-[#D4FF00] scale-105 z-10"
-                          : "bg-white hover:bg-neutral-50"
-                      )}
-                    >
-                      <div className="aspect-[750/1050] bg-white border border-black overflow-hidden mb-2 relative">
-                        <img src={card.imageUrl} alt={card.player} className="w-full h-full object-cover" />
-                        {totalOwned > 1 && (
-                          <div className="absolute top-1 right-1 bg-black text-[#D4FF00] px-1.5 py-0.5 text-[8px] font-black border border-black uppercase">
-                            COPY #{copyNumber}/{totalOwned}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className={cn(
-                            "text-[8px] font-black uppercase px-1 py-0.2 border",
-                            isSelected ? "bg-[#D4FF00] text-black border-black" : "bg-neutral-100 text-neutral-800 border-black/30"
-                          )}>
-                            {card.rarity}
-                          </span>
-                          {totalOwned > 1 && (
-                            <span className="text-[8px] font-black text-neutral-400 uppercase">
-                              COPY #{copyNumber}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs font-black uppercase truncate">{card.player}</div>
-                        <div className="text-[9px] font-bold text-neutral-400 uppercase truncate">{card.team}</div>
-                        <div className="text-xs font-black text-[#D4FF00] font-mono pt-1">
-                          Mkt Value: {formatCurrency(card.currentPrice)}
-                        </div>
-                      </div>
-
-                      <div className="mt-3">
-                        <button
-                          type="button"
-                          className={cn(
-                            "w-full py-1.5 text-[10px] font-black uppercase border border-black transition-colors",
-                            isSelected
-                              ? "bg-[#D4FF00] text-black font-black"
-                              : "bg-black text-[#D4FF00] hover:bg-neutral-800"
-                          )}
-                        >
-                          {isSelected ? 'SELECTED ✓' : 'SELECT TO SELL'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="py-16 text-center space-y-4">
-                <Trophy size={44} className="mx-auto text-neutral-400" />
-                <h4 className="text-xl font-black uppercase tracking-tight text-black">
-                  {sellSearchQuery || sellFilterRarity ? 'NO MATCHING VAULT CARDS' : 'NO UNLISTED VAULT CARDS'}
-                </h4>
-                <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider max-w-md mx-auto">
-                  {sellSearchQuery || sellFilterRarity 
-                    ? 'No unlisted cards in your vault match your current search or rarity filter. Try clearing the filter.' 
-                    : "You don't have any unlisted cards in your Vault right now. Buy cards on the Transfer Market or open booster packs to collect cards!"}
-                </p>
-                {(sellSearchQuery || sellFilterRarity) && (
-                  <button
-                    onClick={() => {
-                      setSellSearchQuery('');
-                      setSellFilterRarity('');
-                    }}
-                    className="bg-black text-[#D4FF00] px-4 py-2 text-xs font-black uppercase"
-                  >
-                    CLEAR FILTERS
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* Sell Drawer / Form when card is selected */}
-          {selectedVaultCard && (() => {
-            const unlistedForSelected = availableVaultCardItems.filter(item => item.card.id === selectedVaultCard.id);
-            const unlistedCount = unlistedForSelected.length;
-            const totalOwned = ownedCountMap.get(selectedVaultCard.id) || 1;
-            const dynamicMktVal = calculateCardMarketPrice(selectedVaultCard, listings);
+          {/* Right Column: Selected Card for Listing Inspector */}
+          <div className="lg:col-span-5 xl:col-span-5 lg:sticky lg:top-6 space-y-6">
+            {selectedVaultCard ? (() => {
+              const unlistedForSelected = availableVaultCardItems.filter(item => item.card.id === selectedVaultCard.id);
+              const unlistedCount = unlistedForSelected.length;
+              const totalOwned = ownedCountMap.get(selectedVaultCard.id) || 1;
+              const dynamicMktVal = calculateCardMarketPrice(selectedVaultCard, listings);
 
-            return (
-              <div className="bg-black text-white border-4 border-black p-6 sm:p-8 shadow-[8px_8px_0px_0px_#D4FF00] animate-fadeIn">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-8">
-                  {/* Left Card Info */}
-                  <div className="flex items-center gap-6">
-                    <div className="w-28 sm:w-36 aspect-[750/1050] bg-white border-3 border-[#D4FF00] overflow-hidden shrink-0 shadow-[4px_4px_0px_0px_rgba(212,255,0,0.5)] relative">
+              return (
+                <div className="bg-black text-white border-3 border-black p-5 sm:p-6 shadow-[6px_6px_0px_0px_#D4FF00] space-y-5 animate-fadeIn">
+                  {/* Panel Header */}
+                  <div className="flex items-center justify-between border-b-2 border-neutral-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#D4FF00] animate-ping" />
+                      <h4 className="text-sm font-black uppercase tracking-wider text-[#D4FF00] flex items-center gap-1.5">
+                        <Tag size={16} /> LISTING DETAILS & PRICING
+                      </h4>
+                    </div>
+                    <button
+                      onClick={() => setSelectedVaultCard(null)}
+                      className="text-neutral-400 hover:text-[#D4FF00] text-[10px] font-black uppercase flex items-center gap-1 border border-neutral-700 px-2 py-0.5 hover:border-[#D4FF00] transition-colors"
+                      title="Clear Selection"
+                    >
+                      <X size={12} /> DESELECT
+                    </button>
+                  </div>
+
+                  {/* Selected Card Preview & Info */}
+                  <div className="flex gap-4 items-start bg-neutral-900 border-2 border-neutral-800 p-3.5">
+                    <div className="w-24 sm:w-28 aspect-[750/1050] bg-white border-2 border-[#D4FF00] overflow-hidden shrink-0 shadow-[3px_3px_0px_0px_rgba(212,255,0,0.5)] relative">
                       <img src={selectedVaultCard.imageUrl} alt={selectedVaultCard.player} className="w-full h-full object-cover" />
                       {totalOwned > 1 && (
-                        <div className="absolute top-1 right-1 bg-black text-[#D4FF00] px-2 py-0.5 text-[9px] font-black border border-[#D4FF00] uppercase">
+                        <div className="absolute top-1 right-1 bg-black text-[#D4FF00] px-1.5 py-0.2 text-[8px] font-black border border-[#D4FF00] uppercase">
                           COPY #{selectedVaultCopyNumber}/{totalOwned}
                         </div>
                       )}
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="bg-[#D4FF00] text-black px-2 py-0.5 text-[10px] font-black uppercase border border-black">
-                          READY TO LIST ON MARKET
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="bg-[#D4FF00] text-black px-1.5 py-0.5 text-[8px] font-black uppercase border border-black">
+                          {selectedVaultCard.rarity}
                         </span>
                         {totalOwned > 1 && (
-                          <span className="bg-neutral-800 text-[#D4FF00] px-2 py-0.5 text-[10px] font-black uppercase border border-neutral-600">
-                            {unlistedCount} UNLISTED AVAILABLE (TOTAL: {totalOwned})
+                          <span className="bg-neutral-800 text-[#D4FF00] px-1.5 py-0.5 text-[8px] font-black uppercase border border-neutral-600">
+                            {unlistedCount} UNLISTED (TOTAL {totalOwned})
                           </span>
                         )}
                       </div>
-                      <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-white">
+
+                      <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-white truncate">
                         {selectedVaultCard.player}
                       </h3>
-                      <p className="text-xs text-neutral-400 font-bold uppercase">
-                        {selectedVaultCard.team} • {selectedVaultCard.rarity} • #{selectedVaultCard.cardNumber}
+                      <p className="text-[10px] text-neutral-400 font-bold uppercase truncate">
+                        {selectedVaultCard.team} • #{selectedVaultCard.cardNumber}
                       </p>
-                      <div className="bg-neutral-900 border border-neutral-700 p-2 text-xs font-mono text-neutral-300">
-                        Dynamic Formula Market Value: <strong className="text-[#D4FF00]">{formatCurrency(dynamicMktVal)}</strong>
+
+                      <div className="pt-1 text-[10px] font-mono text-neutral-300">
+                        Formula Value: <strong className="text-[#D4FF00] font-black">{formatCurrency(dynamicMktVal)}</strong>
                       </div>
                     </div>
                   </div>
 
-                  {/* Right Price Setting & Confirm */}
-                  <div className="bg-neutral-900 border-2 border-neutral-700 p-6 space-y-4 w-full md:w-96 shrink-0">
-                    {unlistedCount > 1 && (
-                      <div>
-                        <label className="block text-xs font-black uppercase tracking-widest text-[#D4FF00] mb-2">
-                          SELECT QUANTITY TO LIST ({unlistedCount} AVAILABLE)
-                        </label>
-                        <div className="flex gap-2">
-                          {[1, 2, 3, unlistedCount].filter((q, idx, arr) => q <= unlistedCount && arr.indexOf(q) === idx).map(qty => (
-                            <button
-                              key={qty}
-                              type="button"
-                              onClick={() => setSellQuantity(qty)}
-                              className={cn(
-                                "flex-1 py-1.5 text-xs font-black uppercase border transition-colors",
-                                sellQuantity === qty
-                                  ? "bg-[#D4FF00] text-black border-[#D4FF00]"
-                                  : "bg-neutral-800 text-white border-neutral-700 hover:border-[#D4FF00]"
-                              )}
-                            >
-                              {qty === unlistedCount && qty > 1 ? `ALL (${qty})` : `${qty} COPY`}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-xs font-black uppercase tracking-widest text-[#D4FF00] mb-2">
-                        SET ASKING PRICE {sellQuantity > 1 ? 'PER COPY ' : ''}(ARTCOIN)
+                  {/* Quantity to List Selector (if multiple unlisted duplicates) */}
+                  {unlistedCount > 1 && (
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-[#D4FF00]">
+                        QUANTITY TO LIST ({unlistedCount} AVAILABLE IN VAULT)
                       </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min="10"
-                          step="10"
-                          value={sellPriceInput}
-                          onChange={(e) => setSellPriceInput(Number(e.target.value))}
-                          className="w-full bg-black border-2 border-[#D4FF00] p-3 text-xl font-black font-mono text-[#D4FF00] focus:outline-none"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-neutral-400">
-                          ARTCOIN
-                        </span>
+                      <div className="flex gap-1.5">
+                        {[1, 2, 3, unlistedCount].filter((q, idx, arr) => q <= unlistedCount && arr.indexOf(q) === idx).map(qty => (
+                          <button
+                            key={qty}
+                            type="button"
+                            onClick={() => setSellQuantity(qty)}
+                            className={cn(
+                              "flex-1 py-1.5 text-xs font-black uppercase border transition-colors",
+                              sellQuantity === qty
+                                ? "bg-[#D4FF00] text-black border-[#D4FF00] shadow-[2px_2px_0px_0px_rgba(255,255,255,1)]"
+                                : "bg-neutral-900 text-white border-neutral-700 hover:border-[#D4FF00]"
+                            )}
+                          >
+                            {qty === unlistedCount && qty > 1 ? `ALL (${qty})` : `${qty} ${qty === 1 ? 'COPY' : 'COPIES'}`}
+                          </button>
+                        ))}
                       </div>
                     </div>
+                  )}
 
-                    {/* Preset Price Quick Buttons */}
-                    <div className="flex gap-2">
+                  {/* Price Setting Input */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-[#D4FF00]">
+                        SET ASKING PRICE {sellQuantity > 1 ? 'PER COPY ' : ''}(ARTCOIN)
+                      </label>
+                      <span className="text-[9px] font-mono text-neutral-400">
+                        BASE: {formatCurrency(getCardStartingPrice(selectedVaultCard))}
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="10"
+                        step="10"
+                        value={sellPriceInput}
+                        onChange={(e) => setSellPriceInput(Math.max(1, Number(e.target.value)))}
+                        className="w-full bg-neutral-950 border-2 border-[#D4FF00] p-2.5 text-xl font-black font-mono text-[#D4FF00] focus:outline-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)]"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-black text-neutral-400">
+                        ARTCOIN
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Quick Price Multiplier Presets */}
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-black text-neutral-400 uppercase">QUICK PRICING PRESETS:</span>
+                    <div className="grid grid-cols-4 gap-1.5">
                       {[
-                        { label: '50% (Quick)', mult: 0.5 },
-                        { label: '100% (Market)', mult: 1.0 },
-                        { label: '150% (High)', mult: 1.5 },
-                        { label: '200% (Premium)', mult: 2.0 }
+                        { label: '50% QUICK', mult: 0.5 },
+                        { label: '100% MKT', mult: 1.0 },
+                        { label: '150% HIGH', mult: 1.5 },
+                        { label: '200% MAX', mult: 2.0 }
                       ].map(p => (
                         <button
                           key={p.label}
                           type="button"
-                          onClick={() => setSellPriceInput(Math.round(dynamicMktVal * p.mult))}
-                          className="flex-1 py-1 bg-neutral-800 hover:bg-[#D4FF00] hover:text-black text-[8px] font-black uppercase border border-neutral-700 transition-colors"
+                          onClick={() => setSellPriceInput(Math.max(10, Math.round(dynamicMktVal * p.mult)))}
+                          className="py-1.5 bg-neutral-900 hover:bg-[#D4FF00] hover:text-black text-[9px] font-black uppercase border border-neutral-700 hover:border-black transition-colors"
                         >
                           {p.label}
                         </button>
                       ))}
                     </div>
+                  </div>
 
+                  {/* Pricing Breakdown & Estimated Total */}
+                  <div className="bg-neutral-900 border border-neutral-800 p-3 space-y-1.5 text-xs font-mono">
+                    <div className="flex justify-between text-neutral-400">
+                      <span>ASKING PRICE:</span>
+                      <span className="text-white font-bold">{formatCurrency(sellPriceInput)}</span>
+                    </div>
                     {sellQuantity > 1 && (
-                      <div className="text-right text-xs font-mono text-[#D4FF00]">
-                        Total Value: <strong>{formatCurrency(sellPriceInput * sellQuantity)}</strong> ({sellQuantity} × {formatCurrency(sellPriceInput)})
+                      <div className="flex justify-between text-neutral-400">
+                        <span>QUANTITY:</span>
+                        <span className="text-white font-bold">{sellQuantity} COPIES</span>
                       </div>
                     )}
-
-                    <div className="pt-2">
-                      <button
-                        onClick={handleConfirmListCard}
-                        disabled={isListingCard}
-                        className="w-full py-4 bg-[#D4FF00] hover:bg-white text-black border-2 border-black font-black text-sm uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-all"
-                      >
-                        {isListingCard 
-                          ? 'LISTING TO MARKET...' 
-                          : sellQuantity > 1
-                            ? `CONFIRM & LIST ${sellQuantity} COPIES (${formatCurrency(sellPriceInput)} EA)`
-                            : `CONFIRM & LIST FOR ${formatCurrency(sellPriceInput)}`
-                        }
-                      </button>
+                    <div className="flex justify-between text-neutral-400">
+                      <span>TRANSFER FEE:</span>
+                      <span className="text-[#D4FF00] font-bold">0% (FREE)</span>
+                    </div>
+                    <div className="border-t border-neutral-800 pt-1.5 flex justify-between text-sm">
+                      <span className="font-black text-white uppercase">TOTAL PROCEEDS:</span>
+                      <span className="font-black text-[#D4FF00]">{formatCurrency(sellPriceInput * sellQuantity)}</span>
                     </div>
                   </div>
+
+                  {/* Submit Button */}
+                  <button
+                    onClick={handleConfirmListCard}
+                    disabled={isListingCard || sellPriceInput <= 0}
+                    className="w-full py-3.5 bg-[#D4FF00] hover:bg-white text-black border-2 border-black font-black text-sm uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isListingCard 
+                      ? 'LISTING TO MARKET...' 
+                      : sellQuantity > 1
+                        ? `CONFIRM & LIST ${sellQuantity} COPIES (${formatCurrency(sellPriceInput)} EA)`
+                        : `CONFIRM & LIST FOR ${formatCurrency(sellPriceInput)}`
+                    }
+                  </button>
+                </div>
+              );
+            })() : (
+              /* Empty Selection Guide Card on Right Side */
+              <div className="bg-neutral-100 border-3 border-dashed border-neutral-400 p-8 text-center space-y-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]">
+                <div className="w-16 h-20 border-2 border-dashed border-neutral-400 mx-auto flex items-center justify-center bg-white shadow-sm">
+                  <Tag size={28} className="text-neutral-400" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black uppercase tracking-tight text-black">
+                    NO CARD SELECTED
+                  </h4>
+                  <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider max-w-xs mx-auto mt-1">
+                    Click any card from your Vault on the left to set your asking price and list it on the Transfer Market.
+                  </p>
+                </div>
+                <div className="bg-white border border-neutral-300 p-3 text-left space-y-1.5 text-[10px] font-bold text-neutral-600 uppercase">
+                  <div className="flex items-center gap-1.5 text-black font-black">
+                    <span className="w-1.5 h-1.5 bg-[#D4FF00] border border-black" />
+                    SELLER TIPS:
+                  </div>
+                  <div>• Price cards around Formula Market Value for faster sales.</div>
+                  <div>• You can list multiple duplicate copies at once.</div>
+                  <div>• 0% listing fee — you keep 100% of the sale proceeds.</div>
                 </div>
               </div>
-            );
-          })()}
+            )}
+          </div>
         </div>
       )}
 
