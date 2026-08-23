@@ -29,10 +29,11 @@ import {
   Type,
   Move,
   Sliders,
-  ExternalLink
+  ExternalLink,
+  Save
 } from 'lucide-react';
 import { db, doc, deleteDoc, updateDoc, setDoc, collection, getDocs, onSnapshot } from '../lib/firebase';
-import { formatCurrency, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
+import { formatCurrency, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice } from '../lib/utils';
 import { cardsDatabase } from '../data';
 import { DEFAULT_OFFICIAL_THEMES, PRESET_OVERLAYS, PRESET_LOGOS, AVAILABLE_FONTS } from '../lib/themePresets';
 import { getCardNationalTeam, getCardClubTeam, getNationalTeamFlag, POPULAR_NATIONAL_TEAMS } from '../lib/teams';
@@ -236,10 +237,28 @@ export function ManageShop({
     setEditingCard(card);
     setEditForm({
       ...card,
-      team: getCardClubTeam(card) || card.team,
+      player: card.player || '',
+      team: getCardClubTeam(card) || card.team || '',
+      club: getCardClubTeam(card) || card.team || '',
       nationalTeam: getCardNationalTeam(card) || '',
+      position: card.position || 'Forward',
+      year: card.year || 2024,
+      season: card.season || `${card.year || 2024}`,
+      set: card.set || '',
+      cardName: card.cardName || '',
+      edition: card.edition || '1st Edition',
+      rarity: card.rarity || 'Base',
+      cardNumber: card.cardNumber || '',
+      imageUrl: card.imageUrl || '',
+      imageGradient: card.imageGradient || 'from-zinc-300 via-gray-400 to-zinc-300',
+      basePrice: card.basePrice ?? getCardStartingPrice(card),
+      currentPrice: card.currentPrice ?? 100,
       stock: card.stock ?? getDefaultStock(card),
-      maxSupply: card.maxSupply ?? getDefaultMaxSupply(card)
+      maxSupply: card.maxSupply ?? getDefaultMaxSupply(card),
+      demandSensitivity: card.demandSensitivity ?? (card.pricingConfig?.kFactor ?? 2),
+      minPrice: card.minPrice ?? '',
+      maxPrice: card.maxPrice ?? '',
+      lastSalePrice: card.lastSalePrice ?? ''
     });
   };
 
@@ -248,20 +267,41 @@ export function ManageShop({
     setIsSaving(true);
     try {
       const cardRef = doc(db, "cards", editingCard.id);
-      await updateDoc(cardRef, {
-        currentPrice: Number(editForm.currentPrice),
-        stock: Number(editForm.stock),
-        maxSupply: Number(editForm.maxSupply),
-        player: editForm.player,
-        team: editForm.team,
-        club: editForm.team,
-        nationalTeam: editForm.nationalTeam || '',
-        position: editForm.position,
-        rarity: editForm.rarity,
-        edition: editForm.edition,
-        imageUrl: editForm.imageUrl
-      });
+      const updatePayload: any = {
+        player: editForm.player?.trim() || '',
+        team: editForm.team?.trim() || '',
+        club: editForm.team?.trim() || '',
+        nationalTeam: editForm.nationalTeam?.trim() || '',
+        position: editForm.position || 'Forward',
+        year: Number(editForm.year) || 2024,
+        season: editForm.season?.trim() || `${Number(editForm.year) || 2024}`,
+        set: editForm.set?.trim() || '',
+        cardName: editForm.cardName?.trim() || '',
+        edition: editForm.edition?.trim() || '1st Edition',
+        rarity: editForm.rarity || 'Base',
+        cardNumber: editForm.cardNumber?.trim() || '',
+        imageUrl: editForm.imageUrl?.trim() || '',
+        imageGradient: editForm.imageGradient || 'from-zinc-300 via-gray-400 to-zinc-300',
+        basePrice: Number(editForm.basePrice || editForm.currentPrice || 100),
+        currentPrice: Number(editForm.currentPrice || 100),
+        stock: Number(editForm.stock ?? 50),
+        maxSupply: Number(editForm.maxSupply ?? 50),
+        demandSensitivity: Number(editForm.demandSensitivity ?? 2)
+      };
+
+      if (editForm.minPrice !== '' && editForm.minPrice !== undefined) {
+        updatePayload.minPrice = Number(editForm.minPrice);
+      }
+      if (editForm.maxPrice !== '' && editForm.maxPrice !== undefined) {
+        updatePayload.maxPrice = Number(editForm.maxPrice);
+      }
+      if (editForm.lastSalePrice !== '' && editForm.lastSalePrice !== undefined) {
+        updatePayload.lastSalePrice = Number(editForm.lastSalePrice);
+      }
+
+      await updateDoc(cardRef, updatePayload);
       setEditingCard(null);
+      if (onToast) onToast(`Updated details for "${editForm.player}"!`);
     } catch (error) {
       console.error("Error updating card:", error);
       alert("Failed to update card.");
@@ -270,11 +310,25 @@ export function ManageShop({
     }
   };
 
+  const handleDeleteCardFromDb = async (cardId: string) => {
+    if (!window.confirm("Are you sure you want to permanently delete this card? This cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, "cards", cardId));
+      setEditingCard(null);
+      if (onToast) onToast("Card permanently removed from database.");
+    } catch (error) {
+      console.error("Error deleting card:", error);
+      alert("Failed to delete card.");
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setEditForm(prev => ({
       ...prev,
-      [name]: ['currentPrice', 'stock', 'maxSupply', 'year'].includes(name) ? Number(value) : value
+      [name]: ['currentPrice', 'basePrice', 'stock', 'maxSupply', 'year', 'demandSensitivity', 'minPrice', 'maxPrice', 'lastSalePrice'].includes(name) 
+        ? (value === '' ? '' : Number(value)) 
+        : value
     }));
   };
 
@@ -2087,122 +2141,373 @@ export function ManageShop({
       )}
 
       {/* ========================================== */}
-      {/* EDIT CARD MODAL                            */}
+      {/* EDIT CARD MODAL (ALL DETAILS)              */}
       {/* ========================================== */}
       {editingCard && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border-4 border-black p-6 sm:p-8 w-full max-w-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white border-4 border-black p-4 sm:p-6 w-full max-w-4xl max-h-[92vh] overflow-y-auto space-y-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] my-auto">
             <div className="flex items-center justify-between border-b-2 border-black pb-3">
-              <h3 className="text-xl font-black uppercase tracking-tighter">
-                EDIT CARD STOCK & METRICS
-              </h3>
-              <button
-                onClick={() => setEditingCard(null)}
-                className="p-1 hover:bg-neutral-100 border border-black"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs font-black uppercase">
               <div>
-                <label className="block text-neutral-500 text-[10px] mb-1">PLAYER NAME</label>
-                <input
-                  type="text"
-                  name="player"
-                  value={editForm.player || ''}
-                  onChange={handleChange}
-                  className="w-full bg-neutral-50 border-2 border-black p-2"
-                />
+                <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tighter flex items-center gap-2">
+                  <Sliders size={22} className="text-[#D4FF00] bg-black p-0.5" /> 
+                  EDIT CARD DETAILS: {editForm.player || 'CARD'} (#{editForm.cardNumber || '---'})
+                </h3>
+                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
+                  Modify identity, team affiliations, pricing formulas, supply caps, and artwork.
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingCard(null)}
+                className="p-1.5 hover:bg-neutral-100 border-2 border-black transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Live Card Preview Thumbnail (4 cols) */}
+              <div className="lg:col-span-4 space-y-4 bg-neutral-50 p-4 border-2 border-black">
+                <span className="block text-[10px] font-black uppercase text-neutral-600 tracking-wider">
+                  LIVE CARD PREVIEW
+                </span>
+                <div className="aspect-[750/1050] w-full max-w-[240px] mx-auto bg-neutral-900 border-2 border-black overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative flex flex-col justify-between p-3">
+                  {editForm.imageUrl ? (
+                    <img
+                      src={editForm.imageUrl}
+                      alt={editForm.player || 'Preview'}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className={`absolute inset-0 opacity-40 bg-gradient-to-tr ${editForm.imageGradient || 'from-zinc-300 via-gray-400 to-zinc-300'}`} />
+                  )}
+                  <div className="relative z-10 flex justify-between items-start">
+                    <span className="text-[9px] font-black uppercase bg-black/80 text-[#D4FF00] px-1.5 py-0.5 border border-black/40">
+                      {editForm.team || 'CLUB'}
+                    </span>
+                    <span className="text-[9px] font-mono font-bold bg-white/90 text-black px-1.5 py-0.5 border border-black/40">
+                      #{editForm.cardNumber || '000'}
+                    </span>
+                  </div>
+                  <div className="relative z-10 bg-black/85 text-white p-2 border border-white/20">
+                    <div className="text-xs font-black uppercase truncate text-white">
+                      {editForm.player || 'PLAYER NAME'}
+                    </div>
+                    <div className="flex justify-between items-center text-[8px] font-bold text-neutral-300 uppercase mt-0.5">
+                      <span>{editForm.rarity || 'Base'}</span>
+                      <span className="text-[#D4FF00] font-mono font-black">{formatCurrency(Number(editForm.currentPrice || 0))}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct Image Upload & URL */}
+                <div className="space-y-2 pt-2 border-t border-black/10 text-xs font-black uppercase">
+                  <label className="block text-[9px] text-neutral-600">CARD ARTWORK / PHOTO</label>
+                  <label className="flex items-center justify-center gap-2 w-full py-2 bg-black text-[#D4FF00] hover:bg-neutral-800 border-2 border-black cursor-pointer text-xs font-black transition-all">
+                    <Upload size={14} /> UPLOAD IMAGE FILE
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (reader.result) {
+                              setEditForm(prev => ({ ...prev, imageUrl: reader.result as string }));
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  <div>
+                    <label className="block text-[8px] text-neutral-500 mb-0.5">OR PASTE IMAGE URL</label>
+                    <input
+                      type="text"
+                      name="imageUrl"
+                      value={editForm.imageUrl || ''}
+                      onChange={handleChange}
+                      placeholder="https://..."
+                      className="w-full bg-white border-2 border-black p-1.5 text-xs font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-500 text-[10px] mb-1">CLUB TEAM</label>
-                  <input
-                    type="text"
-                    name="team"
-                    value={editForm.team || ''}
-                    onChange={handleChange}
-                    className="w-full bg-neutral-50 border-2 border-black p-2 uppercase"
-                    placeholder="e.g. REAL MADRID"
-                  />
+              {/* Right Column: Complete Card Data Fields (8 cols) */}
+              <div className="lg:col-span-8 space-y-4 text-xs font-black uppercase">
+                {/* Group 1: Identity & Positions */}
+                <div className="bg-neutral-50 p-3.5 border-2 border-black space-y-3">
+                  <span className="block text-[9px] font-black text-neutral-500 tracking-wider">
+                    1. PLAYER & TEAM IDENTIFIERS
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">PLAYER FULL NAME *</label>
+                      <input
+                        type="text"
+                        name="player"
+                        value={editForm.player || ''}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-black"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CARD NUMBER (#) *</label>
+                      <input
+                        type="text"
+                        name="cardNumber"
+                        value={editForm.cardNumber || ''}
+                        onChange={handleChange}
+                        placeholder="e.g. 001 or #07"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CLUB TEAM *</label>
+                      <input
+                        type="text"
+                        name="team"
+                        value={editForm.team || ''}
+                        onChange={handleChange}
+                        placeholder="e.g. REAL MADRID"
+                        className="w-full bg-white border-2 border-black p-2 uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">NATIONAL TEAM (COUNTRY)</label>
+                      <input
+                        type="text"
+                        name="nationalTeam"
+                        value={editForm.nationalTeam || ''}
+                        onChange={handleChange}
+                        placeholder="e.g. ARGENTINA"
+                        className="w-full bg-white border-2 border-black p-2 uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">PITCH POSITION</label>
+                      <select
+                        name="position"
+                        value={editForm.position || 'Forward'}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2"
+                      >
+                        <option value="Forward">Forward</option>
+                        <option value="Midfielder">Midfielder</option>
+                        <option value="Defender">Defender</option>
+                        <option value="Goalkeeper">Goalkeeper</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">SEASON / YEAR</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          type="number"
+                          name="year"
+                          value={editForm.year || 2024}
+                          onChange={handleChange}
+                          className="w-full bg-white border-2 border-black p-2 font-mono"
+                        />
+                        <input
+                          type="text"
+                          name="season"
+                          value={editForm.season || ''}
+                          onChange={handleChange}
+                          placeholder="2024-25"
+                          className="w-full bg-white border-2 border-black p-2 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-neutral-500 text-[10px] mb-1">NATIONAL TEAM (COUNTRY)</label>
-                  <input
-                    type="text"
-                    name="nationalTeam"
-                    value={editForm.nationalTeam || ''}
-                    onChange={handleChange}
-                    className="w-full bg-neutral-50 border-2 border-black p-2 uppercase"
-                    placeholder="e.g. ARGENTINA"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-500 text-[10px] mb-1">PRICE (ARTCOIN)</label>
-                  <input
-                    type="number"
-                    name="currentPrice"
-                    value={editForm.currentPrice || 0}
-                    onChange={handleChange}
-                    className="w-full bg-neutral-50 border-2 border-black p-2 font-mono"
-                  />
+                {/* Group 2: Set, Edition & Rarity */}
+                <div className="bg-neutral-50 p-3.5 border-2 border-black space-y-3">
+                  <span className="block text-[9px] font-black text-neutral-500 tracking-wider">
+                    2. SET, EDITION & RARITY
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">SET / COLLECTION</label>
+                      <input
+                        type="text"
+                        name="set"
+                        value={editForm.set || ''}
+                        onChange={handleChange}
+                        placeholder="e.g. Topps Chrome UCL"
+                        className="w-full bg-white border-2 border-black p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CARD SUBTITLE / NAME</label>
+                      <input
+                        type="text"
+                        name="cardName"
+                        value={editForm.cardName || ''}
+                        onChange={handleChange}
+                        placeholder="e.g. Golden Striker"
+                        className="w-full bg-white border-2 border-black p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">EDITION</label>
+                      <input
+                        type="text"
+                        name="edition"
+                        value={editForm.edition || '1st Edition'}
+                        onChange={handleChange}
+                        placeholder="1st Edition"
+                        className="w-full bg-white border-2 border-black p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">RARITY TIER</label>
+                      <select
+                        name="rarity"
+                        value={editForm.rarity || 'Base'}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-bold"
+                      >
+                        {rarities.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CURRENT STOCK</label>
+                      <input
+                        type="number"
+                        name="stock"
+                        value={editForm.stock ?? 0}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MAX SUPPLY LIMIT</label>
+                      <input
+                        type="number"
+                        name="maxSupply"
+                        value={editForm.maxSupply ?? 100}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-neutral-500 text-[10px] mb-1">CURRENT STOCK</label>
-                  <input
-                    type="number"
-                    name="stock"
-                    value={editForm.stock ?? 0}
-                    onChange={handleChange}
-                    className="w-full bg-neutral-50 border-2 border-black p-2 font-mono"
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-neutral-500 text-[10px] mb-1">MAX SUPPLY LIMIT</label>
-                  <input
-                    type="number"
-                    name="maxSupply"
-                    value={editForm.maxSupply ?? 100}
-                    onChange={handleChange}
-                    className="w-full bg-neutral-50 border-2 border-black p-2 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-neutral-500 text-[10px] mb-1">RARITY</label>
-                  <select
-                    name="rarity"
-                    value={editForm.rarity || 'Base'}
-                    onChange={handleChange}
-                    className="w-full bg-neutral-50 border-2 border-black p-2"
-                  >
-                    {rarities.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                {/* Group 3: Financial & Dynamic Pricing Controls */}
+                <div className="bg-neutral-50 p-3.5 border-2 border-black space-y-3">
+                  <span className="block text-[9px] font-black text-neutral-500 tracking-wider">
+                    3. VALUATION & DYNAMIC FORMULA PARAMETERS
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">BASE STARTING PRICE (৳)</label>
+                      <input
+                        type="number"
+                        name="basePrice"
+                        value={editForm.basePrice ?? 100}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CURRENT MARKET VALUE (৳)</label>
+                      <input
+                        type="number"
+                        name="currentPrice"
+                        value={editForm.currentPrice ?? 100}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">DEMAND K SENSITIVITY</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        name="demandSensitivity"
+                        value={editForm.demandSensitivity ?? 2}
+                        onChange={handleChange}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MIN PRICE FLOOR (৳)</label>
+                      <input
+                        type="number"
+                        name="minPrice"
+                        value={editForm.minPrice || ''}
+                        onChange={handleChange}
+                        placeholder="Optional floor"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MAX PRICE CEILING (৳)</label>
+                      <input
+                        type="number"
+                        name="maxPrice"
+                        value={editForm.maxPrice || ''}
+                        onChange={handleChange}
+                        placeholder="Optional cap"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">LAST SALE PRICE (৳)</label>
+                      <input
+                        type="number"
+                        name="lastSalePrice"
+                        value={editForm.lastSalePrice || ''}
+                        onChange={handleChange}
+                        placeholder="Last executed"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            {/* Modal Bottom Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t-2 border-black">
               <button
-                onClick={() => setEditingCard(null)}
-                className="flex-1 py-3 bg-white hover:bg-neutral-100 border-2 border-black font-black uppercase text-xs transition-colors"
+                type="button"
+                onClick={() => handleDeleteCardFromDb(editingCard.id)}
+                className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white border-2 border-rose-600 font-black uppercase text-xs transition-colors flex items-center justify-center gap-2"
               >
-                CANCEL
+                <Trash2 size={15} /> PERMANENTLY DELETE CARD
               </button>
-              <button
-                onClick={handleSaveCard}
-                disabled={isSaving}
-                className="flex-1 py-3 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] border-2 border-black font-black uppercase text-xs transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
-              >
-                {isSaving ? 'SAVING...' : 'SAVE CHANGES'}
-              </button>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setEditingCard(null)}
+                  className="flex-1 sm:flex-initial px-6 py-2.5 bg-white hover:bg-neutral-100 border-2 border-black font-black uppercase text-xs transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCard}
+                  disabled={isSaving}
+                  className="flex-1 sm:flex-initial px-8 py-2.5 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black font-black uppercase text-xs transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" /> SAVING...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} /> SAVE ALL CHANGES
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

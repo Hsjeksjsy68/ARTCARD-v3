@@ -11,11 +11,12 @@ import {
   getCardSoldPriceStats,
   calculateDynamicMarketPrice,
   getDemandLevel,
-  getPriceChangeStats
+  getPriceChangeStats,
+  isAdmin
 } from '../lib/utils';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { db } from '../lib/firebase';
-import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, query, where, onSnapshot, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -49,7 +50,15 @@ import {
   Lock,
   Calculator,
   Copy,
-  Link2
+  Link2,
+  Edit3,
+  Upload,
+  Trash2,
+  X,
+  Sliders,
+  Palette,
+  Save,
+  RefreshCw
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -72,7 +81,7 @@ interface CardPreviewPageProps {
 }
 
 export function CardPreviewPage({
-  card,
+  card: initialCard,
   allCards,
   inCollection = false,
   inVault,
@@ -101,8 +110,151 @@ export function CardPreviewPage({
   const [uniqueOwnersCount, setUniqueOwnersCount] = useState<number>(0);
   const [completedTxPrices, setCompletedTxPrices] = useState<number[]>([]);
 
+  // Local card state so admin edits reflect immediately
+  const [localCard, setLocalCard] = useState<FootballCard>(initialCard);
+  const card = localCard;
+
+  useEffect(() => {
+    setLocalCard(initialCard);
+  }, [initialCard]);
+
+  // Admin edit modal states
+  const isUserAdmin = isAdmin(userEmail);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingCard, setIsSavingCard] = useState(false);
+  const [isDeletingCard, setIsDeletingCard] = useState(false);
+  const [editSuccessMsg, setEditSuccessMsg] = useState<string | null>(null);
+  
+  const [editForm, setEditForm] = useState({
+    player: card.player || '',
+    team: getCardClubTeam(card) || card.team || '',
+    nationalTeam: getCardNationalTeam(card) || '',
+    position: card.position || 'Forward',
+    year: card.year || 2024,
+    season: card.season || `${card.year || 2024}`,
+    set: card.set || '',
+    cardName: card.cardName || '',
+    edition: card.edition || '1st Edition',
+    rarity: card.rarity || 'Base',
+    cardNumber: card.cardNumber || '',
+    imageUrl: card.imageUrl || '',
+    imageGradient: card.imageGradient || 'from-zinc-300 via-gray-400 to-zinc-300',
+    basePrice: card.basePrice ?? getCardStartingPrice(card),
+    currentPrice: card.currentPrice ?? 100,
+    stock: card.stock ?? getDefaultStock(card),
+    maxSupply: card.maxSupply ?? getDefaultMaxSupply(card),
+    demandSensitivity: card.demandSensitivity ?? (card.pricingConfig?.kFactor ?? 2),
+    minPrice: card.minPrice ?? '',
+    maxPrice: card.maxPrice ?? '',
+    lastSalePrice: card.lastSalePrice ?? ''
+  });
+
+  const handleOpenEditModal = () => {
+    setEditForm({
+      player: localCard.player || '',
+      team: getCardClubTeam(localCard) || localCard.team || '',
+      nationalTeam: getCardNationalTeam(localCard) || '',
+      position: localCard.position || 'Forward',
+      year: localCard.year || 2024,
+      season: localCard.season || `${localCard.year || 2024}`,
+      set: localCard.set || '',
+      cardName: localCard.cardName || '',
+      edition: localCard.edition || '1st Edition',
+      rarity: localCard.rarity || 'Base',
+      cardNumber: localCard.cardNumber || '',
+      imageUrl: localCard.imageUrl || '',
+      imageGradient: localCard.imageGradient || 'from-zinc-300 via-gray-400 to-zinc-300',
+      basePrice: localCard.basePrice ?? getCardStartingPrice(localCard),
+      currentPrice: localCard.currentPrice ?? 100,
+      stock: localCard.stock ?? getDefaultStock(localCard),
+      maxSupply: localCard.maxSupply ?? getDefaultMaxSupply(localCard),
+      demandSensitivity: localCard.demandSensitivity ?? (localCard.pricingConfig?.kFactor ?? 2),
+      minPrice: localCard.minPrice ?? '',
+      maxPrice: localCard.maxPrice ?? '',
+      lastSalePrice: localCard.lastSalePrice ?? ''
+    });
+    setEditSuccessMsg(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      if (result) {
+        setEditForm(prev => ({ ...prev, imageUrl: result }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveCardAdmin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingCard(true);
+    try {
+      const cardRef = doc(db, 'cards', localCard.id);
+      const updatedData: Partial<FootballCard> = {
+        player: editForm.player.trim(),
+        team: editForm.team.trim(),
+        club: editForm.team.trim(),
+        nationalTeam: editForm.nationalTeam.trim() || undefined,
+        position: editForm.position,
+        year: Number(editForm.year) || 2024,
+        season: editForm.season.trim() || undefined,
+        set: editForm.set.trim(),
+        cardName: editForm.cardName.trim() || undefined,
+        edition: editForm.edition.trim(),
+        rarity: editForm.rarity as any,
+        cardNumber: editForm.cardNumber.trim(),
+        imageUrl: editForm.imageUrl.trim() || undefined,
+        imageGradient: editForm.imageGradient,
+        basePrice: Number(editForm.basePrice) || 100,
+        currentPrice: Number(editForm.currentPrice) || 100,
+        stock: Number(editForm.stock),
+        maxSupply: Number(editForm.maxSupply),
+        demandSensitivity: Number(editForm.demandSensitivity) || 2,
+        minPrice: editForm.minPrice !== '' ? Number(editForm.minPrice) : undefined,
+        maxPrice: editForm.maxPrice !== '' ? Number(editForm.maxPrice) : undefined,
+        lastSalePrice: editForm.lastSalePrice !== '' ? Number(editForm.lastSalePrice) : undefined
+      };
+
+      await updateDoc(cardRef, updatedData as any);
+      setLocalCard(prev => ({ ...prev, ...updatedData } as FootballCard));
+      setEditSuccessMsg('Card details successfully saved to database!');
+      setTimeout(() => {
+        setIsEditModalOpen(false);
+        setEditSuccessMsg(null);
+      }, 1200);
+    } catch (err: any) {
+      console.error('Failed to update card:', err);
+      alert('Failed to update card: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSavingCard(false);
+    }
+  };
+
+  const handleDeleteCardAdmin = async () => {
+    if (!window.confirm(`Are you sure you want to permanently delete "${localCard.player}" (#${localCard.cardNumber})? This action cannot be undone.`)) {
+      return;
+    }
+    setIsDeletingCard(true);
+    try {
+      await deleteDoc(doc(db, 'cards', localCard.id));
+      alert('Card has been deleted from database.');
+      setIsEditModalOpen(false);
+      onBack();
+    } catch (err: any) {
+      console.error('Error deleting card:', err);
+      alert('Failed to delete card: ' + err?.message);
+    } finally {
+      setIsDeletingCard(false);
+    }
+  };
+
   // Generate canonical direct URL for this single card page based on card number
-  const directCardUrl = getCardDirectUrl(card);
+  const directCardUrl = getCardDirectUrl(localCard);
 
   // Listen to listings, buy requests, unique owners, and completed transactions for this card in real-time
   useEffect(() => {
@@ -248,6 +400,14 @@ export function CardPreviewPage({
         </button>
 
         <div className="flex items-center gap-3">
+          {isUserAdmin && (
+            <button
+              onClick={handleOpenEditModal}
+              className="flex items-center gap-2 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-widest transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-0.5 hover:translate-y-0.5"
+            >
+              <Edit3 size={16} /> 🛠️ EDIT CARD (ADMIN)
+            </button>
+          )}
           {onOpenWallet && (
             <button
               onClick={onOpenWallet}
@@ -454,6 +614,15 @@ export function CardPreviewPage({
                   {card.position}
                 </span>
               </div>
+
+              {isUserAdmin && (
+                <button
+                  onClick={handleOpenEditModal}
+                  className="bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-3 py-1 text-xs font-black uppercase tracking-widest transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5"
+                >
+                  <Edit3 size={13} /> EDIT ALL CARD DETAILS
+                </button>
+              )}
             </div>
 
             <div>
@@ -719,6 +888,378 @@ export function CardPreviewPage({
           )}
         </div>
       </div>
+
+      {/* ========================================== */}
+      {/* ADMIN EDIT ALL DETAILS MODAL               */}
+      {/* ========================================== */}
+      {isUserAdmin && isEditModalOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white border-4 border-black p-4 sm:p-6 w-full max-w-4xl max-h-[92vh] overflow-y-auto space-y-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] my-auto">
+            <div className="flex items-center justify-between border-b-2 border-black pb-3">
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tighter flex items-center gap-2">
+                  <Sliders size={22} className="text-[#D4FF00] bg-black p-0.5" /> 
+                  ADMIN: EDIT CARD DETAILS ({localCard.player})
+                </h3>
+                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">
+                  Modify identity, affiliations, market formula parameters, stock limits, and artwork.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1.5 hover:bg-neutral-100 border-2 border-black transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {editSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border-2 border-emerald-600 text-emerald-800 text-xs font-black uppercase flex items-center gap-2">
+                <CheckCircle2 size={16} /> {editSuccessMsg}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Live Card Preview & Image Upload (4 cols) */}
+              <div className="lg:col-span-4 space-y-4 bg-neutral-50 p-4 border-2 border-black">
+                <span className="block text-[10px] font-black uppercase text-neutral-600 tracking-wider">
+                  LIVE CARD PREVIEW
+                </span>
+                <div className="aspect-[750/1050] w-full max-w-[240px] mx-auto bg-neutral-900 border-2 border-black overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative flex flex-col justify-between p-3">
+                  {editForm.imageUrl ? (
+                    <img
+                      src={editForm.imageUrl}
+                      alt={editForm.player || 'Preview'}
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className={`absolute inset-0 opacity-40 bg-gradient-to-tr ${editForm.imageGradient || 'from-zinc-300 via-gray-400 to-zinc-300'}`} />
+                  )}
+                  <div className="relative z-10 flex justify-between items-start">
+                    <span className="text-[9px] font-black uppercase bg-black/80 text-[#D4FF00] px-1.5 py-0.5 border border-black/40">
+                      {editForm.team || 'CLUB'}
+                    </span>
+                    <span className="text-[9px] font-mono font-bold bg-white/90 text-black px-1.5 py-0.5 border border-black/40">
+                      #{editForm.cardNumber || '000'}
+                    </span>
+                  </div>
+                  <div className="relative z-10 bg-black/85 text-white p-2 border border-white/20">
+                    <div className="text-xs font-black uppercase truncate text-white">
+                      {editForm.player || 'PLAYER NAME'}
+                    </div>
+                    <div className="flex justify-between items-center text-[8px] font-bold text-neutral-300 uppercase mt-0.5">
+                      <span>{editForm.rarity || 'Base'}</span>
+                      <span className="text-[#D4FF00] font-mono font-black">{formatCurrency(Number(editForm.currentPrice || 0))}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direct Image Upload & URL */}
+                <div className="space-y-2 pt-2 border-t border-black/10 text-xs font-black uppercase">
+                  <label className="block text-[9px] text-neutral-600">CARD ARTWORK / PHOTO</label>
+                  <label className="flex items-center justify-center gap-2 w-full py-2 bg-black text-[#D4FF00] hover:bg-neutral-800 border-2 border-black cursor-pointer text-xs font-black transition-all">
+                    <Upload size={14} /> UPLOAD IMAGE FILE
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageFileUpload}
+                    />
+                  </label>
+                  <div>
+                    <label className="block text-[8px] text-neutral-500 mb-0.5">OR PASTE IMAGE URL</label>
+                    <input
+                      type="text"
+                      name="imageUrl"
+                      value={editForm.imageUrl || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, imageUrl: e.target.value }))}
+                      placeholder="https://..."
+                      className="w-full bg-white border-2 border-black p-1.5 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Complete Card Data Fields (8 cols) */}
+              <div className="lg:col-span-8 space-y-4 text-xs font-black uppercase">
+                {/* Group 1: Identity & Positions */}
+                <div className="bg-neutral-50 p-3.5 border-2 border-black space-y-3">
+                  <span className="block text-[9px] font-black text-neutral-500 tracking-wider">
+                    1. PLAYER & TEAM IDENTIFIERS
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">PLAYER FULL NAME *</label>
+                      <input
+                        type="text"
+                        name="player"
+                        value={editForm.player}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, player: e.target.value }))}
+                        className="w-full bg-white border-2 border-black p-2 font-black"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CARD NUMBER (#) *</label>
+                      <input
+                        type="text"
+                        name="cardNumber"
+                        value={editForm.cardNumber}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, cardNumber: e.target.value }))}
+                        placeholder="e.g. 001 or #07"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CLUB TEAM *</label>
+                      <input
+                        type="text"
+                        name="team"
+                        value={editForm.team}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, team: e.target.value }))}
+                        placeholder="e.g. REAL MADRID"
+                        className="w-full bg-white border-2 border-black p-2 uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">NATIONAL TEAM (COUNTRY)</label>
+                      <input
+                        type="text"
+                        name="nationalTeam"
+                        value={editForm.nationalTeam}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, nationalTeam: e.target.value }))}
+                        placeholder="e.g. ARGENTINA"
+                        className="w-full bg-white border-2 border-black p-2 uppercase"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">PITCH POSITION</label>
+                      <select
+                        name="position"
+                        value={editForm.position}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, position: e.target.value as any }))}
+                        className="w-full bg-white border-2 border-black p-2"
+                      >
+                        <option value="Forward">Forward</option>
+                        <option value="Midfielder">Midfielder</option>
+                        <option value="Defender">Defender</option>
+                        <option value="Goalkeeper">Goalkeeper</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">SEASON / YEAR</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          type="number"
+                          name="year"
+                          value={editForm.year}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, year: Number(e.target.value) }))}
+                          className="w-full bg-white border-2 border-black p-2 font-mono"
+                        />
+                        <input
+                          type="text"
+                          name="season"
+                          value={editForm.season}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, season: e.target.value }))}
+                          placeholder="2024-25"
+                          className="w-full bg-white border-2 border-black p-2 font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Group 2: Set, Edition & Rarity */}
+                <div className="bg-neutral-50 p-3.5 border-2 border-black space-y-3">
+                  <span className="block text-[9px] font-black text-neutral-500 tracking-wider">
+                    2. SET, EDITION & RARITY
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">SET / COLLECTION</label>
+                      <input
+                        type="text"
+                        name="set"
+                        value={editForm.set}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, set: e.target.value }))}
+                        placeholder="e.g. Topps Chrome UCL"
+                        className="w-full bg-white border-2 border-black p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CARD SUBTITLE / NAME</label>
+                      <input
+                        type="text"
+                        name="cardName"
+                        value={editForm.cardName}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, cardName: e.target.value }))}
+                        placeholder="e.g. Golden Striker"
+                        className="w-full bg-white border-2 border-black p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">EDITION</label>
+                      <input
+                        type="text"
+                        name="edition"
+                        value={editForm.edition}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, edition: e.target.value }))}
+                        placeholder="1st Edition"
+                        className="w-full bg-white border-2 border-black p-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">RARITY TIER</label>
+                      <select
+                        name="rarity"
+                        value={editForm.rarity}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, rarity: e.target.value as any }))}
+                        className="w-full bg-white border-2 border-black p-2 font-bold"
+                      >
+                        <option value="Base">Base</option>
+                        <option value="Silver Refractor">Silver Refractor</option>
+                        <option value="Gold Autograph">Gold Autograph</option>
+                        <option value="1-of-1 Shield">1-of-1 Shield</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CURRENT STOCK</label>
+                      <input
+                        type="number"
+                        name="stock"
+                        value={editForm.stock}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, stock: Number(e.target.value) }))}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MAX SUPPLY LIMIT</label>
+                      <input
+                        type="number"
+                        name="maxSupply"
+                        value={editForm.maxSupply}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, maxSupply: Number(e.target.value) }))}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Group 3: Financial & Dynamic Pricing Controls */}
+                <div className="bg-neutral-50 p-3.5 border-2 border-black space-y-3">
+                  <span className="block text-[9px] font-black text-neutral-500 tracking-wider">
+                    3. VALUATION & DYNAMIC FORMULA PARAMETERS
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">BASE STARTING PRICE (৳)</label>
+                      <input
+                        type="number"
+                        name="basePrice"
+                        value={editForm.basePrice}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, basePrice: Number(e.target.value) }))}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CURRENT MARKET VALUE (৳)</label>
+                      <input
+                        type="number"
+                        name="currentPrice"
+                        value={editForm.currentPrice}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, currentPrice: Number(e.target.value) }))}
+                        className="w-full bg-white border-2 border-black p-2 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">DEMAND K SENSITIVITY</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        name="demandSensitivity"
+                        value={editForm.demandSensitivity}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, demandSensitivity: Number(e.target.value) }))}
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MIN PRICE FLOOR (৳)</label>
+                      <input
+                        type="number"
+                        name="minPrice"
+                        value={editForm.minPrice}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, minPrice: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        placeholder="Optional floor"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MAX PRICE CEILING (৳)</label>
+                      <input
+                        type="number"
+                        name="maxPrice"
+                        value={editForm.maxPrice}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, maxPrice: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        placeholder="Optional cap"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-600 text-[9px] mb-1">LAST SALE PRICE (৳)</label>
+                      <input
+                        type="number"
+                        name="lastSalePrice"
+                        value={editForm.lastSalePrice}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, lastSalePrice: e.target.value === '' ? '' : Number(e.target.value) }))}
+                        placeholder="Last executed"
+                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Bottom Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t-2 border-black">
+              <button
+                type="button"
+                onClick={handleDeleteCardAdmin}
+                disabled={isDeletingCard}
+                className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white border-2 border-rose-600 font-black uppercase text-xs transition-colors flex items-center justify-center gap-2"
+              >
+                <Trash2 size={15} /> {isDeletingCard ? 'DELETING...' : 'PERMANENTLY DELETE CARD'}
+              </button>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="flex-1 sm:flex-initial px-6 py-2.5 bg-white hover:bg-neutral-100 border-2 border-black font-black uppercase text-xs transition-colors"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCardAdmin}
+                  disabled={isSavingCard}
+                  className="flex-1 sm:flex-initial px-8 py-2.5 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black font-black uppercase text-xs transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2"
+                >
+                  {isSavingCard ? (
+                    <>
+                      <RefreshCw size={15} className="animate-spin" /> SAVING...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} /> SAVE ALL CHANGES
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

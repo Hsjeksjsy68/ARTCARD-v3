@@ -43,7 +43,7 @@ import { Marketplace } from './components/Marketplace';
 import { LeaderboardAndEvents } from './components/LeaderboardAndEvents';
 import { PublicProfileModal } from './components/PublicProfileModal';
 import { FootballCard, Pack, MarketListing, BuyRequest, MarketSettings } from './types';
-import { formatCurrency, getDefaultStock, calculateCardMarketPrice, findCardByNumberOrId, getCardNumberSlug, getCardDirectUrl } from './lib/utils';
+import { formatCurrency, getDefaultStock, calculateCardMarketPrice, findCardByNumberOrId, getCardNumberSlug, getCardDirectUrl, isAdmin } from './lib/utils';
 import { db, auth, onAuthStateChanged, collection, doc, setDoc, getDoc, User, deleteDoc, onSnapshot, getDocs, increment, updateDoc, addDoc } from './lib/firebase';
 
 export default function App() {
@@ -530,7 +530,7 @@ export default function App() {
     (sortBy !== 'default' ? 1 : 0);
 
   const hasActiveFilters = activeFiltersCount > 0;
-  const isAdminUser = user?.email === 'grakibg@gmail.com' || user?.email === 'wwwrakibcom071@gmail.com' || user?.email === '1@1.com';
+  const isAdminUser = isAdmin(user?.email);
 
   return (
     <div className="min-h-screen bg-white text-black flex flex-col font-sans uppercase selection:bg-[#D4FF00] selection:text-black">
@@ -788,7 +788,7 @@ export default function App() {
             onToast={(msg) => setToastMessage(msg)}
           />
         ) : activeTab === 'admin' ? (
-          (user?.email === 'grakibg@gmail.com' || user?.email === 'wwwrakibcom071@gmail.com' || user?.email === '1@1.com') ? (
+          isAdminUser ? (
             <div className="max-w-2xl mx-auto space-y-8">
               <AdminForm onAdd={handleAddCard} totalCards={dynamicCards.filter(c => !!c.imageUrl).length} totalMarketCap={totalMarketCap} existingCards={dynamicCards} />
             </div>
@@ -798,7 +798,7 @@ export default function App() {
             </div>
           )
         ) : activeTab === 'manage' ? (
-          (user?.email === 'grakibg@gmail.com' || user?.email === 'wwwrakibcom071@gmail.com' || user?.email === '1@1.com') ? (
+          isAdminUser ? (
             <ManageShop 
               cards={dynamicCards} 
               packs={packs} 

@@ -3,6 +3,18 @@ import { twMerge } from 'tailwind-merge';
 import { FootballCard, MarketListing, PricePoint, Rarity, BuyRequest, MarketSettings, DemandLevel, PriceHistoryRecord } from '../types';
 import { db, doc, getDoc, setDoc, updateDoc, increment, collection, addDoc } from './firebase';
 
+export const ADMIN_EMAILS: string[] = [
+  'hmoly364@gmail.com',
+  'wwwrakibcom071@gmail.com',
+  'grakibg@gmail.com',
+  '1@1.com'
+];
+
+export function isAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
