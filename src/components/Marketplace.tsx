@@ -246,7 +246,7 @@ export function Marketplace({
       if (curCopy > currentlyListed) {
         const c = cardMap.get(id);
         if (c) {
-          // Dynamic market value calculated using formula: ((starting + listings) / total)
+          // Dynamic market value calculated using formula: (base price) + (avg market selling price)
           const dynamicCard = {
             ...c,
             currentPrice: calculateCardMarketPrice(c, listings)
@@ -2300,7 +2300,7 @@ export function Marketplace({
                     <span className="font-mono text-black font-black">{formatCurrency(dynamicMarketPrice)}</span>
                   </div>
                   <p className="text-[9px] font-bold text-neutral-500 uppercase leading-snug">
-                    Formula: (Base {formatCurrency(baseStartingPrice)} + {activeListings.filter(l => l.cardId === card.id).length} Active Listings) ÷ Total Units
+                    Formula: (Base {formatCurrency(baseStartingPrice)}) + (Sold Out Avg Price)
                   </p>
                 </div>
 

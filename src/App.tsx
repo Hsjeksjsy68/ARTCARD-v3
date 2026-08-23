@@ -42,7 +42,7 @@ import { WalletModal } from './components/WalletModal';
 import { Marketplace } from './components/Marketplace';
 import { LeaderboardAndEvents } from './components/LeaderboardAndEvents';
 import { PublicProfileModal } from './components/PublicProfileModal';
-import { FootballCard, Pack, MarketListing } from './types';
+import { FootballCard, Pack, MarketListing, BuyRequest, MarketSettings } from './types';
 import { formatCurrency, getDefaultStock, calculateCardMarketPrice, findCardByNumberOrId, getCardNumberSlug, getCardDirectUrl } from './lib/utils';
 import { db, auth, onAuthStateChanged, collection, doc, setDoc, getDoc, User, deleteDoc, onSnapshot, getDocs, increment, updateDoc, addDoc } from './lib/firebase';
 
@@ -80,6 +80,9 @@ export default function App() {
   const [marketInitialSellCard, setMarketInitialSellCard] = useState<FootballCard | null>(null);
   const [cards, setCards] = useState<FootballCard[]>([]);
   const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
+  const [buyRequests, setBuyRequests] = useState<BuyRequest[]>([]);
+  const [marketSettings, setMarketSettings] = useState<MarketSettings | undefined>(undefined);
+  const [totalActiveUsers, setTotalActiveUsers] = useState<number>(100);
   const [loadingCards, setLoadingCards] = useState(true);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [themes, setThemes] = useState<any[]>([]);
@@ -165,11 +168,40 @@ export default function App() {
       console.error("Error fetching market listings for valuation:", error);
     });
 
+    const buyRequestsRef = collection(db, 'buy_requests');
+    const unsubscribeBuyRequests = onSnapshot(buyRequestsRef, (snapshot) => {
+      const loadedRequests: BuyRequest[] = [];
+      snapshot.forEach(doc => {
+        loadedRequests.push({ id: doc.id, ...doc.data() } as BuyRequest);
+      });
+      setBuyRequests(loadedRequests);
+    }, (error) => {
+      console.error("Error fetching buy requests:", error);
+    });
+
+    const settingsRef = doc(db, 'market_settings', 'global');
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setMarketSettings(docSnap.data() as MarketSettings);
+      }
+    }, (error) => {
+      console.error("Error fetching dynamic market settings:", error);
+    });
+
+    // Also get active users count
+    const usersRef = collection(db, 'users');
+    const unsubscribeUsers = onSnapshot(usersRef, (snapshot) => {
+      setTotalActiveUsers(Math.max(10, snapshot.size || 100));
+    }, () => {});
+
     return () => {
       unsubscribeCards();
       unsubscribePacks();
       unsubscribeThemes();
       unsubscribeListings();
+      unsubscribeBuyRequests();
+      unsubscribeSettings();
+      unsubscribeUsers();
     };
   }, []);
 
@@ -363,7 +395,7 @@ export default function App() {
   };
 
   // Dynamically calculate market value for all cards using the formula:
-  // ((starting card price + users listing prices in market) / amount of cards)
+  // (base price) + (sold out avg price)
   const dynamicCards = useMemo(() => {
     return cards.map(c => ({
       ...c,
@@ -767,7 +799,16 @@ export default function App() {
           )
         ) : activeTab === 'manage' ? (
           (user?.email === 'grakibg@gmail.com' || user?.email === 'wwwrakibcom071@gmail.com' || user?.email === '1@1.com') ? (
-            <ManageShop cards={dynamicCards} packs={packs} themes={themes} />
+            <ManageShop 
+              cards={dynamicCards} 
+              packs={packs} 
+              themes={themes} 
+              listings={marketListings}
+              buyRequests={buyRequests}
+              marketSettings={marketSettings}
+              totalActiveUsers={totalActiveUsers}
+              onToast={(msg) => setToastMessage(msg)}
+            />
           ) : (
             <div className="text-center py-20 font-black tracking-widest text-neutral-500 uppercase">
                Access Denied

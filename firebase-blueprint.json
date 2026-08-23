@@ -55,6 +55,37 @@
       "soldAt": "number"
     }
   },
+  "buy_requests": {
+    "$requestId": {
+      "cardId": "string",
+      "buyerId": "string",
+      "buyerName": "string",
+      "buyerAvatar": "string",
+      "targetPrice": "number",
+      "status": "string",
+      "createdAt": "number",
+      "fulfilledAt": "number"
+    }
+  },
+  "market_settings": {
+    "$settingId": {
+      "defaultK": "number",
+      "minPricePercentage": "number",
+      "maxPricePercentage": "number",
+      "maxBuyRequestsPerUser": "number"
+    }
+  },
+  "price_history": {
+    "$historyId": {
+      "cardId": "string",
+      "oldPrice": "number",
+      "newPrice": "number",
+      "changePercentage": "number",
+      "buyRequests": "number",
+      "sellListings": "number",
+      "timestamp": "number"
+    }
+  },
   "events": {
     "$eventId": {
       "title": "string",

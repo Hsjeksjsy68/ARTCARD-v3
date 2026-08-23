@@ -1,10 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { FootballCard, MarketListing } from '../types';
+import { FootballCard, MarketListing, BuyRequest, MarketSettings } from '../types';
 import { PriceChart } from './PriceChart';
-import { formatCurrency, cn, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice, getCardDirectUrl } from '../lib/utils';
+import { 
+  formatCurrency, 
+  cn, 
+  getDefaultStock, 
+  getDefaultMaxSupply, 
+  getCardStartingPrice, 
+  getCardDirectUrl, 
+  getCardSoldPriceStats,
+  calculateDynamicMarketPrice,
+  getDemandLevel,
+  getPriceChangeStats
+} from '../lib/utils';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, query, where, onSnapshot } from 'firebase/firestore';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -81,34 +92,70 @@ export function CardPreviewPage({
   const [copiedDirect, setCopiedDirect] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
   const [activeMarketListings, setActiveMarketListings] = useState<MarketListing[]>([]);
+  const [allMarketListings, setAllMarketListings] = useState<MarketListing[]>([]);
   const [loadingMarketListings, setLoadingMarketListings] = useState(true);
+  const [buyRequests, setBuyRequests] = useState<BuyRequest[]>([]);
+  const [marketSettings, setMarketSettings] = useState<MarketSettings | undefined>(undefined);
+  const [totalActiveUsers, setTotalActiveUsers] = useState<number>(100);
 
   // Generate canonical direct URL for this single card page based on card number
   const directCardUrl = getCardDirectUrl(card);
 
-  // Listen to active listings for this card in real-time
+  // Listen to listings, buy requests, and market settings for this card in real-time
   useEffect(() => {
     try {
-      const q = query(
-        collection(db, 'market_listings'),
-        where('status', '==', 'active')
-      );
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const matches: MarketListing[] = [];
+      const qListings = collection(db, 'market_listings');
+      const unsubscribeListings = onSnapshot(qListings, (snapshot) => {
+        const activeMatches: MarketListing[] = [];
+        const allMatches: MarketListing[] = [];
         snapshot.forEach(docSnap => {
           const item = { id: docSnap.id, ...docSnap.data() } as MarketListing;
           if (item.cardId === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) {
-            matches.push(item);
+            allMatches.push(item);
+            if (item.status === 'active') {
+              activeMatches.push(item);
+            }
           }
         });
-        matches.sort((a, b) => a.price - b.price);
-        setActiveMarketListings(matches);
+        activeMatches.sort((a, b) => a.price - b.price);
+        setActiveMarketListings(activeMatches);
+        setAllMarketListings(allMatches);
         setLoadingMarketListings(false);
       }, (err) => {
         console.error("Error loading market listings:", err);
         setLoadingMarketListings(false);
       });
-      return () => unsubscribe();
+
+      const qBuyRequests = collection(db, 'buy_requests');
+      const unsubscribeBuy = onSnapshot(qBuyRequests, (snapshot) => {
+        const activeRequests: BuyRequest[] = [];
+        snapshot.forEach(docSnap => {
+          const item = { id: docSnap.id, ...docSnap.data() } as BuyRequest;
+          if ((item.cardId === card.id || item.card?.player?.toLowerCase() === card.player.toLowerCase()) && item.status === 'active') {
+            activeRequests.push(item);
+          }
+        });
+        setBuyRequests(activeRequests);
+      }, () => {});
+
+      const qSettings = doc(db, 'market_settings', 'global');
+      const unsubscribeSettings = onSnapshot(qSettings, (docSnap) => {
+        if (docSnap.exists()) {
+          setMarketSettings(docSnap.data() as MarketSettings);
+        }
+      }, () => {});
+
+      const qUsers = collection(db, 'users');
+      const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
+        setTotalActiveUsers(Math.max(10, snapshot.size || 100));
+      }, () => {});
+
+      return () => {
+        unsubscribeListings();
+        unsubscribeBuy();
+        unsubscribeSettings();
+        unsubscribeUsers();
+      };
     } catch (e) {
       console.error(e);
       setLoadingMarketListings(false);
@@ -533,19 +580,78 @@ export function CardPreviewPage({
             </div>
 
             {/* Dynamic Market Valuation Formula Breakdown */}
-            <div className="bg-neutral-50 border-2 border-black p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-black flex items-center gap-1.5">
-                  <Calculator size={14} className="text-black" /> DYNAMIC MARKET PRICE FORMULA
-                </span>
-                <span className="text-[9px] font-bold text-neutral-500 font-mono">
-                  (Starting Base + Market Listings) ÷ Total Units
-                </span>
-              </div>
-              <p className="text-[10px] font-bold text-neutral-600 uppercase leading-relaxed">
-                Market Value is dynamically calculated as: <span className="text-black font-black font-mono">({formatCurrency(getCardStartingPrice(card))} base + {activeMarketListings.length > 0 ? `${formatCurrency(activeMarketListings.reduce((s, l) => s + l.price, 0))} across ${activeMarketListings.length} market listings` : '0 listed'}) ÷ {1 + activeMarketListings.length} units</span> = <strong className="text-black font-black font-mono">{formatCurrency(card.currentPrice)}</strong>.
-              </p>
-            </div>
+            {(() => {
+              const basePrice = getCardStartingPrice(card);
+              const activeBuyRequestsCount = buyRequests.length;
+              const activeSellListingsCount = activeMarketListings.length;
+              const kFactor = card.pricingConfig?.kFactor ?? marketSettings?.defaultK ?? 2;
+              
+              const pricingResult = calculateDynamicMarketPrice(card, {
+                buyRequests,
+                listings: activeMarketListings,
+                totalActiveUsers,
+                settings: marketSettings
+              });
+              
+              const demandLevel = getDemandLevel(activeBuyRequestsCount, activeSellListingsCount);
+              const minAllowed = Math.round(basePrice * ((marketSettings?.minPricePercentage ?? 50) / 100));
+              const maxAllowed = Math.round(basePrice * ((marketSettings?.maxPricePercentage ?? 500) / 100));
+
+              return (
+                <div className="bg-neutral-50 border-2 border-black p-4 sm:p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-black/10 pb-3">
+                    <span className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                      <Calculator size={16} className="text-black" /> DYNAMIC MARKET PRICING ENGINE
+                    </span>
+                    <span className={cn(
+                      "px-2 py-0.5 text-[9px] font-black uppercase border",
+                      demandLevel.badgeBg,
+                      demandLevel.badgeBorder
+                    )}>
+                      DEMAND: {demandLevel.level} ({demandLevel.ratio === Infinity ? '∞' : `${demandLevel.ratio.toFixed(2)}x`})
+                    </span>
+                  </div>
+
+                  {/* Formula Definition */}
+                  <div className="bg-black text-[#D4FF00] p-3 border border-black font-mono text-[11px] font-bold space-y-1">
+                    <div className="text-white text-[9px] uppercase tracking-widest">LIVE FORMULA:</div>
+                    <div className="leading-relaxed">
+                      Market Price = Base Price × (1 + ((Buy Requests − Sell Listings) ÷ Total Active Users) × K)
+                    </div>
+                  </div>
+
+                  {/* Formula Variable Values */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs font-mono">
+                    <div className="bg-white border border-black p-2">
+                      <span className="block text-[8px] font-sans font-black text-neutral-500 uppercase">BASE PRICE</span>
+                      <span className="font-black text-black">{formatCurrency(basePrice)}</span>
+                    </div>
+                    <div className="bg-white border border-black p-2">
+                      <span className="block text-[8px] font-sans font-black text-neutral-500 uppercase">BUY REQUESTS</span>
+                      <span className="font-black text-blue-600">{activeBuyRequestsCount}</span>
+                    </div>
+                    <div className="bg-white border border-black p-2">
+                      <span className="block text-[8px] font-sans font-black text-neutral-500 uppercase">SELL LISTINGS</span>
+                      <span className="font-black text-amber-600">{activeSellListingsCount}</span>
+                    </div>
+                    <div className="bg-white border border-black p-2">
+                      <span className="block text-[8px] font-sans font-black text-neutral-500 uppercase">K SENSITIVITY</span>
+                      <span className="font-black text-purple-600">{kFactor}</span>
+                    </div>
+                  </div>
+
+                  {/* Price Protection Rules */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase text-neutral-600 bg-white border border-black p-2.5">
+                    <span>
+                      🛡️ Price Protection Bounds: <strong>{formatCurrency(minAllowed)}</strong> (50% min) - <strong>{formatCurrency(maxAllowed)}</strong> (500% max)
+                    </span>
+                    <span className="font-mono font-black text-black">
+                      FINAL VALUE: {formatCurrency(pricingResult.finalPrice)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Price Chart */}
             <div className="pt-4">

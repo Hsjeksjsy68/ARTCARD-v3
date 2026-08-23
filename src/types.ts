@@ -44,25 +44,47 @@ export interface CardTheme {
   fontScaleY?: number;
 }
 
+export type DemandLevel = 'VERY LOW' | 'LOW' | 'NORMAL' | 'HIGH' | 'VERY HIGH';
+
 export interface FootballCard {
   id: string;
+  cardId?: string; // alias for id
   player: string;
+  playerName?: string; // alias for player
   team: string; // Club team / Primary team
   club?: string; // Explicit Club team
   nationalTeam?: string; // National Team (e.g. Argentina, Portugal, France, Brazil, etc.)
   position: string;
   year: number;
+  season?: string; // alias for year/season e.g. "2024-25"
   set: string;
+  cardName?: string; // descriptive card name
   edition: string;
   rarity: Rarity;
   cardNumber: string;
   imageUrl?: string;
   imageGradient: string;
+  basePrice?: number; // Fixed starting price of the card
+  currentPrice: number; // Current Market Price
+  currentMarketPrice?: number; // Alias for currentPrice
+  buyRequests?: number; // Active buy requests count
+  sellListings?: number; // Active sell listings count
+  minPrice?: number; // Minimum price protection limit
+  maxPrice?: number; // Maximum price protection limit
+  demandSensitivity?: number; // K value for this card (default 2)
+  pricingConfig?: {
+    kFactor?: number;
+    minPricePercentage?: number;
+    maxPricePercentage?: number;
+    isLocked?: boolean;
+  };
+  lastPriceUpdate?: number | string; // Timestamp of last price update
   priceHistory: PricePoint[];
-  currentPrice: number;
   searchCount?: number;
   stock?: number;
   maxSupply?: number;
+  lastSalePrice?: number;
+  lastSoldAt?: number;
 }
 
 export interface UserProfileData {
@@ -146,4 +168,53 @@ export interface CommunityEvent {
   conditionType: 'market_trade' | 'ucl_cards' | 'shield_owner' | 'vault_value' | 'packs_opened';
   expiresAt: number;
   bannerGradient: string;
+}
+
+export interface BuyRequest {
+  id: string;
+  cardId: string;
+  card: FootballCard;
+  buyerId: string;
+  buyerName: string;
+  buyerAvatar?: string;
+  buyerTeam?: string;
+  targetPrice: number; // Max price willing to pay in ARTCOIN
+  status: 'active' | 'fulfilled' | 'cancelled';
+  createdAt: number;
+  fulfilledAt?: number;
+  fulfilledBySellerId?: string;
+  fulfilledBySellerName?: string;
+  fulfilledPrice?: number;
+  note?: string;
+}
+
+export interface MarketSettings {
+  defaultK: number; // Default demand sensitivity factor, default 2
+  minPricePercentage: number; // Default 50%
+  maxPricePercentage: number; // Default 500%
+  maxBuyRequestsPerUser: number; // Default 5
+  updatedAt?: number;
+  priceUpdateFrequency?: string;
+  demandThresholds?: {
+    veryLow: number; // < 0.5
+    low: number; // 0.5 - 0.99
+    normal: number; // 1.0 - 1.49
+    high: number; // 1.5 - 2.49
+    veryHigh: number; // >= 2.5
+  };
+}
+
+export interface PriceHistoryRecord {
+  id?: string;
+  cardId: string;
+  playerName?: string;
+  oldPrice: number;
+  newPrice: number;
+  changePercentage: number;
+  buyRequests: number;
+  sellListings: number;
+  totalActiveUsers: number;
+  kFactor: number;
+  timestamp: number;
+  reason?: string;
 }

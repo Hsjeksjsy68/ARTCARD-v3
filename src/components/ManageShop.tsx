@@ -36,12 +36,19 @@ import { formatCurrency, getDefaultStock, getDefaultMaxSupply } from '../lib/uti
 import { cardsDatabase } from '../data';
 import { DEFAULT_OFFICIAL_THEMES, PRESET_OVERLAYS, PRESET_LOGOS, AVAILABLE_FONTS } from '../lib/themePresets';
 import { getCardNationalTeam, getCardClubTeam, getNationalTeamFlag, POPULAR_NATIONAL_TEAMS } from '../lib/teams';
+import { MarketListing, BuyRequest, MarketSettings } from '../types';
+import { DynamicMarketPriceAdmin } from './DynamicMarketPriceAdmin';
 
 interface ManageShopProps {
   cards: FootballCard[];
   packs: Pack[];
   themes: any[];
-  initialTab?: 'cards' | 'inventory' | 'packs' | 'themes' | 'transactions';
+  listings?: MarketListing[];
+  buyRequests?: BuyRequest[];
+  marketSettings?: MarketSettings;
+  totalActiveUsers?: number;
+  onToast?: (msg: string) => void;
+  initialTab?: 'cards' | 'inventory' | 'packs' | 'themes' | 'transactions' | 'market-settings';
   onNavigateToCardCreator?: () => void;
 }
 
@@ -63,8 +70,19 @@ interface TransactionRecord {
   paymentMethod?: string;
 }
 
-export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavigateToCardCreator }: ManageShopProps) {
-  const [activeTab, setActiveTab] = useState<'cards' | 'inventory' | 'packs' | 'themes' | 'transactions'>(initialTab);
+export function ManageShop({ 
+  cards, 
+  packs, 
+  themes, 
+  listings = [],
+  buyRequests = [],
+  marketSettings,
+  totalActiveUsers = 100,
+  onToast,
+  initialTab = 'cards', 
+  onNavigateToCardCreator 
+}: ManageShopProps) {
+  const [activeTab, setActiveTab] = useState<'cards' | 'inventory' | 'packs' | 'themes' | 'transactions' | 'market-settings'>(initialTab);
   
   useEffect(() => {
     if (initialTab) {
@@ -679,6 +697,14 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setActiveTab('market-settings')}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-widest border-2 border-black transition-colors flex items-center gap-1.5 ${
+                activeTab === 'market-settings' ? 'bg-[#D4FF00] text-black font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white text-black hover:bg-neutral-100'
+              }`}
+            >
+              <Sliders size={14} /> DYNAMIC PRICING ENGINE
+            </button>
             <button
               onClick={() => setActiveTab('cards')}
               className={`px-4 py-2 text-xs font-black uppercase tracking-widest border-2 border-black transition-colors ${
@@ -1422,6 +1448,18 @@ export function ManageShop({ cards, packs, themes, initialTab = 'cards', onNavig
               </table>
             </div>
           </div>
+        )}
+
+        {/* TAB 6: DYNAMIC MARKET PRICE ENGINE & DEMAND SETTINGS */}
+        {activeTab === 'market-settings' && (
+          <DynamicMarketPriceAdmin
+            cards={cards}
+            listings={listings}
+            buyRequests={buyRequests}
+            currentSettings={marketSettings}
+            totalActiveUsers={totalActiveUsers}
+            onToast={onToast}
+          />
         )}
       </div>
 

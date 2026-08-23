@@ -1,8 +1,8 @@
 import React from 'react';
 import { FootballCard } from '../types';
-import { cn, formatCurrency, getDefaultStock, getDefaultMaxSupply } from '../lib/utils';
+import { cn, formatCurrency, getDefaultStock, getDefaultMaxSupply, getCardBasePrice, getDemandLevel, getPriceChangeStats } from '../lib/utils';
 import { motion } from 'motion/react';
-import { Shield, Sparkles, Star, Heart, Trophy, AlertCircle } from 'lucide-react';
+import { Shield, Sparkles, Star, Heart, Trophy, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 
 interface CardItemProps {
@@ -37,6 +37,14 @@ export function CardItem({
   const clubName = getCardClubTeam(card) || card.team;
   const nationalName = getCardNationalTeam(card);
   
+  // Dynamic Pricing & Demand Stats
+  const basePrice = getCardBasePrice(card);
+  const currentPrice = Number(card.currentPrice) || basePrice;
+  const buyRequests = card.buyRequests || 0;
+  const sellListings = card.sellListings || 0;
+  const demand = getDemandLevel(buyRequests, sellListings);
+  const priceChange = getPriceChangeStats(basePrice, currentPrice);
+
   // Format vault badge label (e.g. "COPY #1", "COPY #2 OF 3", or "OWNED: 2")
   let vaultBadgeLabel = "VAULT";
   if (copyNumber) {
@@ -52,7 +60,7 @@ export function CardItem({
       whileHover={{ y: -8, scale: 1.02 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       onClick={() => onClick(card)}
-      className="group cursor-pointer relative"
+      className="group cursor-pointer relative flex flex-col"
     >
       {/* Card Body */}
       <div className={cn(
@@ -105,10 +113,10 @@ export function CardItem({
           )}
         </div>
 
-        {/* Stock / Limited Edition Badge (Hidden in Vault) */}
-        {!isOwnedInVault && (
-          <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-30 flex flex-col gap-1">
-            {isSoldOut ? (
+        {/* Stock & Demand Badges */}
+        <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 z-30 flex flex-col gap-1 items-start">
+          {!isOwnedInVault && (
+            isSoldOut ? (
               <div className="bg-red-600 text-white border border-black px-1.5 py-0.5 text-[8px] sm:text-[9px] font-black uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                 SOLD OUT
               </div>
@@ -123,9 +131,21 @@ export function CardItem({
               )}>
                 {stock} / {maxSupply} LEFT
               </div>
-            )}
-          </div>
-        )}
+            )
+          )}
+
+          {/* Demand Status Badge */}
+          {(buyRequests > 0 || sellListings > 0 || demand.level !== 'NORMAL') && (
+            <div className={cn(
+              "px-1.5 py-0.5 border text-[7.5px] sm:text-[8px] font-black uppercase tracking-wider shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1",
+              demand.badgeBg,
+              demand.badgeBorder
+            )}>
+              <span className={cn("w-1.5 h-1.5 rounded-full inline-block", demand.dotColor)} />
+              <span>{demand.level} DEMAND</span>
+            </div>
+          )}
+        </div>
 
         {card.imageUrl ? (
           <img src={card.imageUrl} alt={card.player} className="absolute inset-0 w-full h-full object-cover z-10" />
@@ -166,15 +186,50 @@ export function CardItem({
         )}
       </div>
       
-      {/* Price tag below card */}
-      <div className="mt-2 sm:mt-4 flex justify-between items-center px-1">
-        <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-neutral-500">{card.cardNumber}</span>
-        <span className={cn(
-          "text-xs sm:text-sm font-black transition-colors",
-          !isOwnedInVault && isSoldOut ? "text-neutral-400 line-through" : "text-black group-hover:text-neutral-700"
-        )}>
-          {formatCurrency(card.currentPrice)}
-        </span>
+      {/* Price tag and Dynamic Market Metrics below card */}
+      <div className="mt-2 sm:mt-3 px-1 space-y-1">
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-neutral-500">{card.cardNumber}</span>
+          
+          <div className="flex items-center gap-1.5">
+            {/* Price change badge */}
+            {priceChange.trend !== 'neutral' && (
+              <span className={cn(
+                "text-[8px] sm:text-[9px] font-black font-mono px-1 py-0.2 border flex items-center gap-0.5",
+                priceChange.trend === 'up' 
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-300" 
+                  : "bg-rose-50 text-rose-700 border-rose-300"
+              )}>
+                {priceChange.trend === 'up' ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+                {priceChange.formattedPercentage}
+              </span>
+            )}
+
+            {/* Current Market Price */}
+            <span className={cn(
+              "text-xs sm:text-sm font-black transition-colors font-mono",
+              !isOwnedInVault && isSoldOut ? "text-neutral-400 line-through" : "text-black group-hover:text-neutral-800"
+            )}>
+              {formatCurrency(currentPrice)}
+            </span>
+          </div>
+        </div>
+
+        {/* Market demand & buy/sell breakdown footer */}
+        <div className="flex items-center justify-between text-[8px] sm:text-[9px] font-bold text-neutral-500 font-mono pt-0.5 border-t border-neutral-200">
+          <span title={`Base Price: ${formatCurrency(basePrice)}`}>
+            Base: {formatCurrency(basePrice, true)}
+          </span>
+          <div className="flex items-center gap-1.5 text-neutral-600">
+            <span className="text-emerald-600" title={`${buyRequests} active buy requests`}>
+              {buyRequests} Buy
+            </span>
+            <span>•</span>
+            <span className="text-indigo-600" title={`${sellListings} active sell listings`}>
+              {sellListings} Sell
+            </span>
+          </div>
+        </div>
       </div>
     </motion.div>
   );
