@@ -352,9 +352,6 @@ export function CardPreviewPage({
     }
   };
 
-  const stock = getDefaultStock(card);
-  const maxSupply = getDefaultMaxSupply(card);
-  const isSoldOut = stock <= 0;
   const lowestMarketPrice = activeMarketListings.length > 0 ? activeMarketListings[0].price : null;
 
   // Price analysis
@@ -690,39 +687,15 @@ export function CardPreviewPage({
               </div>
               <div className="bg-neutral-50 border-2 border-black p-3">
                 <div className="text-[9px] font-black uppercase text-neutral-500">
-                  {isOwnedInVault ? 'VAULT STATUS' : 'SUPPLY LIMIT'}
+                  {isOwnedInVault ? 'VAULT STATUS' : 'CIRCULATION'}
                 </div>
-                <div className={cn(
-                  "text-sm font-black truncate",
-                  !isOwnedInVault && isSoldOut ? "text-red-600" : "text-black"
-                )}>
+                <div className="text-sm font-black truncate text-black">
                   {isOwnedInVault 
                     ? `OWNED (${effectiveOwnedCount} ${effectiveOwnedCount === 1 ? 'COPY' : 'COPIES'})` 
-                    : (isSoldOut ? 'SOLD OUT' : `${stock} / ${maxSupply} LEFT`)}
+                    : (card.rarity === '1-of-1 Shield' ? '1-OF-1 SHIELD' : 'OPEN CIRCULATION')}
                 </div>
               </div>
             </div>
-
-            {/* Supply Limitation Status Bar (Hidden if Owned in Vault) */}
-            {!isOwnedInVault && (
-              <div className="bg-neutral-100 border-2 border-black p-4 space-y-2">
-                <div className="flex items-center justify-between text-xs font-black uppercase">
-                  <span>ONLINE CARD SUPPLY & AVAILABILITY</span>
-                  <span className={isSoldOut ? 'text-red-600' : 'text-emerald-700'}>
-                    {isSoldOut ? '0 COPIES REMAINING' : `${stock} OF ${maxSupply} AVAILABLE`}
-                  </span>
-                </div>
-                <div className="w-full h-3 bg-neutral-300 border border-black overflow-hidden">
-                  <div 
-                    className={cn(
-                      "h-full transition-all duration-500",
-                      isSoldOut ? "bg-red-500 w-0" : "bg-[#D4FF00]"
-                    )}
-                    style={{ width: `${Math.min(100, Math.max(5, (stock / maxSupply) * 100))}%` }}
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Market Valuation & Performance Card */}
@@ -1123,22 +1096,22 @@ export function CardPreviewPage({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-neutral-600 text-[9px] mb-1">CURRENT STOCK</label>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CIRCULATION STATUS</label>
                       <input
-                        type="number"
-                        name="stock"
-                        value={editForm.stock}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, stock: Number(e.target.value) }))}
-                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                        type="text"
+                        disabled
+                        value="Unlimited / On-Demand"
+                        className="w-full bg-neutral-200 border-2 border-black p-2 text-neutral-600 font-black cursor-not-allowed text-[11px]"
                       />
                     </div>
                     <div>
-                      <label className="block text-neutral-600 text-[9px] mb-1">MAX SUPPLY LIMIT</label>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MAX PRINT SUPPLY (OPTIONAL)</label>
                       <input
                         type="number"
                         name="maxSupply"
-                        value={editForm.maxSupply}
+                        value={editForm.maxSupply || ''}
                         onChange={(e) => setEditForm(prev => ({ ...prev, maxSupply: Number(e.target.value) }))}
+                        placeholder="e.g. 100"
                         className="w-full bg-white border-2 border-black p-2 font-mono"
                       />
                     </div>

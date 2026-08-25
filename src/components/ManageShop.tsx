@@ -30,7 +30,10 @@ import {
   Move,
   Sliders,
   ExternalLink,
-  Save
+  Save,
+  Download,
+  Database,
+  Archive
 } from 'lucide-react';
 import { db, doc, deleteDoc, updateDoc, setDoc, collection, getDocs, onSnapshot } from '../lib/firebase';
 import { formatCurrency, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice } from '../lib/utils';
@@ -39,6 +42,7 @@ import { DEFAULT_OFFICIAL_THEMES, PRESET_OVERLAYS, PRESET_LOGOS, AVAILABLE_FONTS
 import { getCardNationalTeam, getCardClubTeam, getNationalTeamFlag, POPULAR_NATIONAL_TEAMS } from '../lib/teams';
 import { MarketListing, BuyRequest, MarketSettings } from '../types';
 import { DynamicMarketPriceAdmin } from './DynamicMarketPriceAdmin';
+import { downloadStockBackupJSON, STOCK_BACKUP_SNAPSHOT, generateLiveStockBackup } from '../data/stockBackup';
 
 interface ManageShopProps {
   cards: FootballCard[];
@@ -49,7 +53,7 @@ interface ManageShopProps {
   marketSettings?: MarketSettings;
   totalActiveUsers?: number;
   onToast?: (msg: string) => void;
-  initialTab?: 'cards' | 'inventory' | 'packs' | 'themes' | 'transactions' | 'market-settings';
+  initialTab?: 'cards' | 'inventory' | 'packs' | 'themes' | 'transactions' | 'market-settings' | 'stock-backup';
   onNavigateToCardCreator?: () => void;
 }
 
@@ -83,7 +87,7 @@ export function ManageShop({
   initialTab = 'cards', 
   onNavigateToCardCreator 
 }: ManageShopProps) {
-  const [activeTab, setActiveTab] = useState<'cards' | 'inventory' | 'packs' | 'themes' | 'transactions' | 'market-settings'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'cards' | 'inventory' | 'packs' | 'themes' | 'transactions' | 'market-settings' | 'stock-backup'>(initialTab);
   
   useEffect(() => {
     if (initialTab) {
@@ -669,12 +673,11 @@ export function ManageShop({
       const cardDeletes = cardsSnap.docs.map(d => deleteDoc(d.ref));
       await Promise.all(cardDeletes);
       
-      // 2. Insert default cards
+      // 2. Insert default cards (stock limitations removed, open circulation)
       const cardAdds = cardsDatabase.map(card => {
         const { id, ...cardData } = card;
         return setDoc(doc(db, 'cards', id), {
           ...cardData,
-          stock: getDefaultStock(card),
           maxSupply: getDefaultMaxSupply(card)
         });
       });
@@ -747,7 +750,7 @@ export function ManageShop({
           <div>
             <h2 className="text-3xl font-black uppercase tracking-tighter">ADMIN CONTROL ROOM & THEME STUDIO</h2>
             <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500 mt-0.5">
-              DATABASE STOCK CONTROL, PACK CONFIG & CUSTOM CARD MAKER TEMPLATES
+              DATABASE CARD MANAGEMENT, STOCK BACKUP ARCHIVE, PACK CONFIG & THEME STUDIO
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -765,7 +768,15 @@ export function ManageShop({
                 activeTab === 'cards' ? 'bg-black text-[#D4FF00]' : 'bg-white text-black hover:bg-neutral-100'
               }`}
             >
-              CARDS & STOCK ({cards.length})
+              CARDS DATABASE ({cards.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('stock-backup')}
+              className={`px-4 py-2 text-xs font-black uppercase tracking-widest border-2 border-black transition-colors flex items-center gap-1.5 ${
+                activeTab === 'stock-backup' ? 'bg-[#D4FF00] text-black font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]' : 'bg-white text-black hover:bg-neutral-100'
+              }`}
+            >
+              <Archive size={14} /> STOCK BACKUP & ARCHIVE
             </button>
             <button
               onClick={() => setActiveTab('inventory')}
@@ -901,21 +912,19 @@ export function ManageShop({
                     <th className="p-3">CLUB & NATION</th>
                     <th className="p-3">RARITY</th>
                     <th className="p-3 text-right">PRICE</th>
-                    <th className="p-3 text-center">STOCK CONTROL</th>
+                    <th className="p-3 text-center">CIRCULATION</th>
                     <th className="p-3 text-center">MAX SUPPLY</th>
                     <th className="p-3 text-right">ACTION</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y-2 divide-black text-xs font-bold">
                   {filteredCards.slice(0, 50).map(card => {
-                    const currentStock = card.stock ?? getDefaultStock(card);
                     const maxSupply = card.maxSupply ?? getDefaultMaxSupply(card);
-                    const isOutOfStock = currentStock <= 0;
                     const cardClub = getCardClubTeam(card) || card.team;
                     const cardNation = getCardNationalTeam(card);
 
                     return (
-                      <tr key={card.id} className={`hover:bg-neutral-50 transition-colors ${isOutOfStock ? 'bg-red-50/60' : ''}`}>
+                      <tr key={card.id} className="hover:bg-neutral-50 transition-colors">
                         <td className="p-3 flex items-center gap-3">
                           <div className="w-10 h-14 bg-neutral-200 border border-black shrink-0 overflow-hidden relative">
                             {card.imageUrl ? (
@@ -953,24 +962,9 @@ export function ManageShop({
                           {formatCurrency(card.currentPrice)}
                         </td>
                         <td className="p-3 text-center">
-                          <div className="inline-flex items-center gap-1.5 bg-white border border-black p-1">
-                            <button
-                              onClick={() => handleQuickStockAdjust(card, -1)}
-                              disabled={currentStock <= 0}
-                              className="p-1 hover:bg-neutral-100 disabled:opacity-30 border border-black/20"
-                            >
-                              <Minus size={10} />
-                            </button>
-                            <span className={`font-mono font-black text-xs px-2 ${isOutOfStock ? 'text-red-600' : 'text-black'}`}>
-                              {currentStock}
-                            </span>
-                            <button
-                              onClick={() => handleQuickStockAdjust(card, 1)}
-                              className="p-1 hover:bg-neutral-100 border border-black/20"
-                            >
-                              <Plus size={10} />
-                            </button>
-                          </div>
+                          <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-black uppercase border border-emerald-600 bg-emerald-100 text-emerald-800">
+                            UNLIMITED
+                          </span>
                         </td>
                         <td className="p-3 text-center font-mono font-bold text-neutral-600">
                           {maxSupply === 1 ? '1-OF-1' : maxSupply}
@@ -995,6 +989,101 @@ export function ManageShop({
                 SHOWING FIRST 50 OF {filteredCards.length} MATCHING CARDS. USE SEARCH OR FILTERS TO REFINE.
               </p>
             )}
+          </div>
+        )}
+
+        {/* TAB: STOCK BACKUP & ARCHIVE SNAPSHOT */}
+        {activeTab === 'stock-backup' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-widest flex items-center gap-2">
+                  <Archive size={20} className="text-amber-600" /> STOCK SYSTEM BACKUP & HISTORICAL ARCHIVE
+                </h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                  Frozen snapshot and configuration archive created before stock restrictions were removed.
+                </p>
+              </div>
+              <button
+                onClick={() => downloadStockBackupJSON(cards)}
+                className="bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+              >
+                <Download size={15} /> EXPORT BACKUP JSON
+              </button>
+            </div>
+
+            {/* Summary Highlights */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="bg-neutral-50 border-2 border-black p-4">
+                <span className="text-[10px] font-black uppercase text-neutral-500 block">ARCHIVED CARDS</span>
+                <span className="text-2xl font-black">{STOCK_BACKUP_SNAPSHOT.archivedCards.length}</span>
+              </div>
+              <div className="bg-neutral-50 border-2 border-black p-4">
+                <span className="text-[10px] font-black uppercase text-neutral-500 block">STATUS</span>
+                <span className="text-2xl font-black text-emerald-600">UNLIMITED</span>
+              </div>
+              <div className="bg-neutral-50 border-2 border-black p-4">
+                <span className="text-[10px] font-black uppercase text-neutral-500 block">BACKUP DATE</span>
+                <span className="text-sm font-mono font-black">{new Date(STOCK_BACKUP_SNAPSHOT.backupTimestamp).toLocaleDateString()}</span>
+              </div>
+              <div className="bg-neutral-50 border-2 border-black p-4">
+                <span className="text-[10px] font-black uppercase text-neutral-500 block">CURRENT CATALOG</span>
+                <span className="text-2xl font-black">{cards.length} LIVE</span>
+              </div>
+            </div>
+
+            {/* Rarity Baseline Rules Backup */}
+            <div className="bg-white border-2 border-black p-4 space-y-3">
+              <span className="text-xs font-black uppercase tracking-widest block">HISTORICAL RARITY STOCK RULES:</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {Object.entries(STOCK_BACKUP_SNAPSHOT.defaultRarityStockRules).map(([tier, rule]) => (
+                  <div key={tier} className="bg-neutral-50 border border-black p-3 space-y-1">
+                    <div className="text-[10px] font-black uppercase text-neutral-500">{tier}</div>
+                    <div className="text-base font-black">Stock: {rule.defaultStock}</div>
+                    <div className="text-xs font-mono text-neutral-600">Max: {rule.defaultMaxSupply}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Archived Cards Table */}
+            <div className="space-y-2">
+              <span className="text-xs font-black uppercase tracking-widest block">FROZEN STOCK SNAPSHOT TABLE:</span>
+              <div className="overflow-x-auto border-2 border-black max-h-[500px]">
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0 bg-neutral-100 border-b-2 border-black text-[10px] font-black uppercase tracking-wider z-10">
+                    <tr>
+                      <th className="p-3">CARD</th>
+                      <th className="p-3">TEAM / NATION</th>
+                      <th className="p-3">RARITY</th>
+                      <th className="p-3 text-center">HISTORICAL STOCK</th>
+                      <th className="p-3 text-center">HISTORICAL MAX</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y-2 divide-black text-xs font-bold bg-white">
+                    {STOCK_BACKUP_SNAPSHOT.archivedCards.map((c, idx) => (
+                      <tr key={c.cardNumber || idx} className="hover:bg-neutral-50">
+                        <td className="p-3">
+                          <div className="font-black uppercase">{c.player}</div>
+                          <div className="text-[10px] font-mono text-neutral-500">{c.cardNumber}</div>
+                        </td>
+                        <td className="p-3 uppercase">
+                          <div>{c.team || '—'}</div>
+                          {c.nationalTeam && <div className="text-[10px] text-neutral-500">{c.nationalTeam}</div>}
+                        </td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 text-[9px] font-black uppercase border border-black inline-block bg-neutral-100">
+                            {c.rarity}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center font-mono font-black">{c.stock}</td>
+                        <td className="p-3 text-center font-mono font-bold text-neutral-500">{c.maxSupply}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
@@ -2376,17 +2465,16 @@ export function ManageShop({
                       </select>
                     </div>
                     <div>
-                      <label className="block text-neutral-600 text-[9px] mb-1">CURRENT STOCK</label>
+                      <label className="block text-neutral-600 text-[9px] mb-1">CIRCULATION STATUS</label>
                       <input
-                        type="number"
-                        name="stock"
-                        value={editForm.stock ?? 0}
-                        onChange={handleChange}
-                        className="w-full bg-white border-2 border-black p-2 font-mono"
+                        type="text"
+                        disabled
+                        value="Unlimited / Open Circulation"
+                        className="w-full bg-neutral-200 border-2 border-black p-2 text-neutral-600 font-black cursor-not-allowed text-[11px]"
                       />
                     </div>
                     <div>
-                      <label className="block text-neutral-600 text-[9px] mb-1">MAX SUPPLY LIMIT</label>
+                      <label className="block text-neutral-600 text-[9px] mb-1">MAX PRINT SUPPLY (OPTIONAL)</label>
                       <input
                         type="number"
                         name="maxSupply"

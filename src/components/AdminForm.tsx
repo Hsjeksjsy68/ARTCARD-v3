@@ -63,7 +63,6 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
     if (formData.rarity === '1-of-1 Shield') gradient = 'from-zinc-900 via-zinc-600 to-zinc-900';
     if (formData.rarity === 'Silver Refractor') gradient = 'from-slate-200 via-gray-300 to-slate-200';
 
-    const stockNum = formData.rarity === '1-of-1 Shield' ? 1 : parseInt(formData.stock, 10) || 50;
     const maxSupplyNum = formData.rarity === '1-of-1 Shield' ? 1 : parseInt(formData.maxSupply, 10) || 50;
 
     const newCard: FootballCard = {
@@ -81,7 +80,6 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
       imageGradient: gradient,
       priceHistory: history,
       currentPrice: basePrice,
-      stock: stockNum,
       maxSupply: maxSupplyNum
     };
 
@@ -311,15 +309,9 @@ export function AdminForm({ onAdd, totalCards, totalMarketCap, existingCards }: 
               <label className={labelClasses}>Market Price (৳)</label>
               <input required type="number" min="0" step="1" name="currentPrice" value={formData.currentPrice} onChange={handleChange} className={inputClasses} placeholder="1000" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClasses}>Initial Stock</label>
-                <input required type="number" min="0" step="1" name="stock" value={formData.stock} onChange={handleChange} className={inputClasses} placeholder="50" />
-              </div>
-              <div>
-                <label className={labelClasses}>Max Print Supply</label>
-                <input required type="number" min="1" step="1" name="maxSupply" value={formData.maxSupply} onChange={handleChange} className={inputClasses} placeholder="50" />
-              </div>
+            <div>
+              <label className={labelClasses}>Max Supply / Print Limit (Optional)</label>
+              <input type="number" min="1" step="1" name="maxSupply" value={formData.maxSupply} onChange={handleChange} className={inputClasses} placeholder="50 (or leave default)" />
             </div>
           </div>
 

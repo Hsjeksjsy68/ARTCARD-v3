@@ -107,16 +107,7 @@ export function PackShop({
         walletBalance: increment(-pack.price)
       }, { merge: true });
 
-      // 3. Decrement stock for each drawn card in Firestore
-      for (const card of drawn) {
-        const cardRef = doc(db, 'cards', card.id);
-        const curStock = getDefaultStock(card);
-        await setDoc(cardRef, {
-          stock: Math.max(0, curStock - 1)
-        }, { merge: true }).catch(() => {});
-      }
-
-      // 4. Log transaction
+      // 3. Log transaction
       const txRef = collection(db, 'transactions');
       await addDoc(txRef, {
         userId: user.uid,

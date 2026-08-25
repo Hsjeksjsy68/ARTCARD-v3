@@ -271,13 +271,8 @@ export function calculateCardMarketValue(
     rawOwners = Math.max(0, options.ownersCount);
   } else if (typeof (card as any).ownersCount === 'number') {
     rawOwners = Math.max(0, (card as any).ownersCount);
-  } else if (card.stock !== undefined && card.maxSupply !== undefined) {
-    rawOwners = Math.max(0, card.maxSupply - card.stock);
   } else {
-    // If not explicitly provided, estimate from default maxSupply & stock
-    const defaultMax = getDefaultMaxSupply(card);
-    const defaultCur = getDefaultStock(card);
-    rawOwners = Math.max(0, defaultMax - defaultCur);
+    rawOwners = 1;
   }
 
   // Safe owners: if owners <= 0, safeguard division by zero with safe minimum 1
@@ -647,9 +642,8 @@ export function drawRandomCards(
     }
   }
 
-  // Filter cards with stock > 0 if available, else all cards
-  const inStockCards = eligibleCards.filter(c => (c.stock === undefined ? true : c.stock > 0));
-  const pool = inStockCards.length > 0 ? inStockCards : eligibleCards;
+  // Pool of cards for pack draw (stock limitation removed, all cards in pool are available)
+  const pool = eligibleCards;
 
   const baseCards = pool.filter(c => c.rarity === 'Base');
   const silverCards = pool.filter(c => c.rarity === 'Silver Refractor');

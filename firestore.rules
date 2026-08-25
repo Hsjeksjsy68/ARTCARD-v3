@@ -4,6 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isAdmin() {
       return request.auth != null && (
+        request.auth.token.email == "hmoly364@gmail.com" ||
         request.auth.token.email == "grakibg@gmail.com" || 
         request.auth.token.email == "wwwrakibcom071@gmail.com" || 
         request.auth.token.email == "1@1.com"

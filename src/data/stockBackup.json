@@ -1,0 +1,29 @@
+{
+  "backupTitle": "Stock System Historical Backup Snapshot",
+  "backupTimestamp": "2026-08-25T08:35:00.000Z",
+  "backupVersion": "1.0.0",
+  "description": "Archived snapshot of stock counts and supply limits prior to stock system removal. Cards are now in unlimited/open circulation on-demand.",
+  "defaultRarityStockRules": {
+    "Base": { "defaultStock": 100, "defaultMaxSupply": 100 },
+    "Silver Refractor": { "defaultStock": 50, "defaultMaxSupply": 50 },
+    "Gold Autograph": { "defaultStock": 10, "defaultMaxSupply": 10 },
+    "1-of-1 Shield": { "defaultStock": 1, "defaultMaxSupply": 1 }
+  },
+  "archivedCards": [
+    { "cardNumber": "001", "player": "Lionel Messi", "rarity": "Gold Autograph", "stock": 10, "maxSupply": 10, "team": "Inter Miami CF", "nationalTeam": "Argentina" },
+    { "cardNumber": "002", "player": "Cristiano Ronaldo", "rarity": "Gold Autograph", "stock": 10, "maxSupply": 10, "team": "Al Nassr FC", "nationalTeam": "Portugal" },
+    { "cardNumber": "003", "player": "Kylian Mbappé", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Real Madrid", "nationalTeam": "France" },
+    { "cardNumber": "004", "player": "Erling Haaland", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Manchester City", "nationalTeam": "Norway" },
+    { "cardNumber": "005", "player": "Jude Bellingham", "rarity": "Gold Autograph", "stock": 10, "maxSupply": 10, "team": "Real Madrid", "nationalTeam": "England" },
+    { "cardNumber": "006", "player": "Vinícius Júnior", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Real Madrid", "nationalTeam": "Brazil" },
+    { "cardNumber": "007", "player": "Lamine Yamal", "rarity": "1-of-1 Shield", "stock": 1, "maxSupply": 1, "team": "FC Barcelona", "nationalTeam": "Spain" },
+    { "cardNumber": "008", "player": "Kevin De Bruyne", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Manchester City", "nationalTeam": "Belgium" },
+    { "cardNumber": "009", "player": "Harry Kane", "rarity": "Base", "stock": 100, "maxSupply": 100, "team": "Bayern Munich", "nationalTeam": "England" },
+    { "cardNumber": "010", "player": "Mohamed Salah", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Liverpool FC", "nationalTeam": "Egypt" },
+    { "cardNumber": "011", "player": "Bukayo Saka", "rarity": "Base", "stock": 100, "maxSupply": 100, "team": "Arsenal FC", "nationalTeam": "England" },
+    { "cardNumber": "012", "player": "Rodri", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Manchester City", "nationalTeam": "Spain" },
+    { "cardNumber": "013", "player": "Pedri", "rarity": "Base", "stock": 100, "maxSupply": 100, "team": "FC Barcelona", "nationalTeam": "Spain" },
+    { "cardNumber": "014", "player": "Phil Foden", "rarity": "Base", "stock": 100, "maxSupply": 100, "team": "Manchester City", "nationalTeam": "England" },
+    { "cardNumber": "015", "player": "Florian Wirtz", "rarity": "Silver Refractor", "stock": 50, "maxSupply": 50, "team": "Bayer Leverkusen", "nationalTeam": "Germany" }
+  ]
+}
