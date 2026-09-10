@@ -2,7 +2,7 @@ import React from 'react';
 import { FootballCard } from '../types';
 import { cn, formatCurrency, getDefaultStock, getDefaultMaxSupply, getCardBasePrice, getDemandLevel, getPriceChangeStats } from '../lib/utils';
 import { motion } from 'motion/react';
-import { Shield, Sparkles, Star, Heart, Trophy, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Shield, Sparkles, Star, Heart, Trophy, TrendingUp, TrendingDown, Minus, Gift } from 'lucide-react';
 import { getCardClubTeam, getCardNationalTeam, getNationalTeamFlag } from '../lib/teams';
 
 interface CardItemProps {
@@ -14,6 +14,7 @@ interface CardItemProps {
   copyNumber?: number;
   totalCopies?: number;
   onToggleFavorite?: (e: React.MouseEvent, cardId: string) => void;
+  onGift?: (e: React.MouseEvent, card: FootballCard) => void;
   onClick: (card: FootballCard) => void;
   key?: React.Key;
 }
@@ -27,6 +28,7 @@ export function CardItem({
   copyNumber,
   totalCopies,
   onToggleFavorite, 
+  onGift,
   onClick 
 }: CardItemProps) {
   const isHolo = card.rarity !== 'Base';
@@ -78,6 +80,21 @@ export function CardItem({
               <Trophy size={10} className="sm:w-3 sm:h-3 text-[#D4FF00]" />
               <span>{vaultBadgeLabel}</span>
             </div>
+          )}
+
+          {/* Quick Gift Button (if in vault) */}
+          {isOwnedInVault && onGift && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onGift(e, card);
+              }}
+              title="Gift this card to another collector"
+              className="p-1 sm:p-1.5 border-2 border-black bg-white hover:bg-[#D4FF00] text-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:scale-110 active:scale-95 opacity-90 group-hover:opacity-100"
+            >
+              <Gift size={13} className="sm:w-3.5 sm:h-3.5" />
+            </button>
           )}
 
           {/* Interactive Favorite Wishlist Button */}

@@ -1,5 +1,29 @@
 export type Rarity = 'Base' | 'Silver Refractor' | 'Gold Autograph' | '1-of-1 Shield';
 
+export type PackAnimationStyle =
+  | 'auto'
+  | 'mythic-1of1'
+  | 'liquid-gold'
+  | 'silver-refractor'
+  | 'stadium-base'
+  | 'retro-cyber';
+
+export interface CardOpenInfoData {
+  serialTag: string;
+  printRun: string;
+  authenticityCode: string;
+  rarityTitle: string;
+  tierScore: string;
+  hologramType: string;
+  soundProfile: string;
+  centeringGrade: string;
+  cornersGrade: string;
+  edgesGrade: string;
+  surfaceGrade: string;
+  overallGrade: string;
+  vaultStatus: string;
+}
+
 export interface PricePoint {
   date: string;
   price: number;
@@ -15,6 +39,7 @@ export interface Pack {
   description?: string;
   editions?: string[];
   badgeText?: string;
+  openingAnimation?: PackAnimationStyle;
   rarityOdds?: {
     base: number;
     silver: number;
@@ -243,3 +268,24 @@ export interface PriceHistoryRecord {
   timestamp: number;
   reason?: string;
 }
+
+export type GiftWrapStyle = 'gold' | 'neon' | 'velvet' | 'hologram';
+
+export interface CardGift {
+  id: string;
+  senderUid: string;
+  senderName: string;
+  senderEmail?: string;
+  senderAvatar?: string;
+  recipientUid: string;
+  recipientName: string;
+  recipientEmail?: string;
+  cardId: string;
+  card?: FootballCard;
+  giftNote?: string;
+  wrapStyle: GiftWrapStyle;
+  opened: boolean;
+  createdAt: number;
+  openedAt?: number;
+}
+

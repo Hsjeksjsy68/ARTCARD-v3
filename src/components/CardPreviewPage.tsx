@@ -58,7 +58,8 @@ import {
   Sliders,
   Palette,
   Save,
-  RefreshCw
+  RefreshCw,
+  Gift
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -78,6 +79,7 @@ interface CardPreviewPageProps {
   onOpenWallet?: () => void;
   onNavigateToMarket?: (playerName?: string, tab?: 'browse' | 'sell', cardToSell?: FootballCard) => void;
   onNavigateToShop?: () => void;
+  onOpenGiftModal?: (card: FootballCard) => void;
 }
 
 export function CardPreviewPage({
@@ -95,7 +97,8 @@ export function CardPreviewPage({
   walletBalance = 0,
   onOpenWallet,
   onNavigateToMarket,
-  onNavigateToShop
+  onNavigateToShop,
+  onOpenGiftModal
 }: CardPreviewPageProps) {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedDirect, setCopiedDirect] = useState(false);
@@ -548,6 +551,15 @@ export function CardPreviewPage({
                   >
                     <Tag size={14} />
                     LIST FOR SALE ({effectiveOwnedCount} OWNED)
+                  </button>
+                )}
+                {isOwnedInVault && onOpenGiftModal && (
+                  <button
+                    onClick={() => onOpenGiftModal(card)}
+                    className="py-3 px-3 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black font-black text-[11px] uppercase tracking-wider transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-1.5 col-span-1 sm:col-span-2"
+                  >
+                    <Gift size={15} />
+                    GIFT THIS CARD TO ANOTHER COLLECTOR
                   </button>
                 )}
               </div>

@@ -103,5 +103,20 @@
       "description": "string",
       "timestamp": "number"
     }
+  },
+  "gifts": {
+    "$giftId": {
+      "senderUid": "string",
+      "senderName": "string",
+      "senderEmail": "string",
+      "recipientUid": "string",
+      "recipientName": "string",
+      "recipientEmail": "string",
+      "cardId": "string",
+      "giftNote": "string",
+      "wrapStyle": "string",
+      "opened": "boolean",
+      "createdAt": "number"
+    }
   }
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FootballCard, Pack } from '../types';
-import { PackageOpen, Sparkles, Truck, CreditCard, CheckCircle, Wallet, Info, Plus, Award, Play } from 'lucide-react';
+import { PackageOpen, Sparkles, Truck, CreditCard, CheckCircle, Wallet, Info, Plus, Award, Play, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency, drawRandomCards, getDefaultStock } from '../lib/utils';
 import { PackOpeningModal } from './PackOpeningModal';
@@ -69,6 +69,7 @@ export function PackShop({
       size: 3,
       price: 250,
       color: 'bg-white text-black',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=800&auto=format&fit=crop',
       description: 'Perfect for beginners. 3 guaranteed collectible cards with refractor chances.',
       rarityOdds: { base: 80, silver: 18, gold: 2, shield: 0 }
     },
@@ -78,6 +79,7 @@ export function PackShop({
       size: 5,
       price: 500,
       color: 'bg-[#D4FF00] text-black',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?q=80&w=800&auto=format&fit=crop',
       description: 'High-value collector pack with elevated Gold Autograph drop rates.',
       rarityOdds: { base: 60, silver: 30, gold: 9, shield: 1 }
     },
@@ -87,6 +89,7 @@ export function PackShop({
       size: 7,
       price: 1200,
       color: 'bg-black text-white',
+      coverPhotoUrl: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?q=80&w=800&auto=format&fit=crop',
       description: 'Maximum rarity pack. Highest odds of pulling numbered autographs & 1-of-1 Shields.',
       rarityOdds: { base: 40, silver: 40, gold: 17, shield: 3 }
     }
@@ -237,6 +240,12 @@ export function PackShop({
                   {pack.badgeText && (
                     <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-[#D4FF00] text-black border border-black animate-pulse">
                       {pack.badgeText}
+                    </span>
+                  )}
+                  {pack.openingAnimation && pack.openingAnimation !== 'auto' && (
+                    <span className="text-[8px] font-mono font-black uppercase tracking-wider px-1.5 py-0.5 bg-black text-[#D4FF00] border border-black flex items-center gap-1">
+                      <Zap size={9} />
+                      {pack.openingAnimation.replace('-', ' ')}
                     </span>
                   )}
                 </div>

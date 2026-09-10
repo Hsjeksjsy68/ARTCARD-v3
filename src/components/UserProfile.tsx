@@ -26,7 +26,8 @@ import {
   Crown,
   Heart,
   ShoppingCart,
-  PackageCheck
+  PackageCheck,
+  Gift
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AuthModal } from './AuthModal';
@@ -41,6 +42,9 @@ interface UserProfileProps {
   onNavigateTab: (tab: any) => void;
   onToggleCollection?: (cardId: string) => void;
   onToggleFavorite?: (cardId: string) => void;
+  onOpenGiftModal?: () => void;
+  onOpenGiftsInbox?: () => void;
+  unopenedGiftsCount?: number;
 }
 
 export function UserProfile({
@@ -52,7 +56,10 @@ export function UserProfile({
   onSelectCard,
   onNavigateTab,
   onToggleCollection,
-  onToggleFavorite
+  onToggleFavorite,
+  onOpenGiftModal,
+  onOpenGiftsInbox,
+  unopenedGiftsCount = 0
 }: UserProfileProps) {
   const [profileData, setProfileData] = useState<UserProfileData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -357,6 +364,30 @@ export function UserProfile({
             >
               <Edit3 size={14} /> EDIT PROFILE
             </button>
+
+            {onOpenGiftsInbox && (
+              <button
+                onClick={onOpenGiftsInbox}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white hover:bg-[#D4FF00] text-black border-2 border-black px-4 py-2.5 text-xs font-black uppercase tracking-widest transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] relative"
+              >
+                <Gift size={14} /> 
+                GIFTS INBOX
+                {unopenedGiftsCount > 0 && (
+                  <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-black animate-pulse">
+                    {unopenedGiftsCount} NEW
+                  </span>
+                )}
+              </button>
+            )}
+
+            {onOpenGiftModal && (
+              <button
+                onClick={onOpenGiftModal}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white hover:bg-neutral-100 text-black border-2 border-black px-4 py-2.5 text-xs font-black uppercase tracking-widest transition-colors shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+              >
+                <Gift size={14} /> GIFT A CARD
+              </button>
+            )}
 
             <button
               onClick={() => onNavigateTab('marketplace')}

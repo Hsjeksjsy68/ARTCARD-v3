@@ -26,7 +26,8 @@ import {
   Layers,
   Check,
   Shield,
-  Palette
+  Palette,
+  Gift
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cardsDatabase } from './data';
@@ -42,6 +43,8 @@ import { WalletModal } from './components/WalletModal';
 import { Marketplace } from './components/Marketplace';
 import { LeaderboardAndEvents } from './components/LeaderboardAndEvents';
 import { PublicProfileModal } from './components/PublicProfileModal';
+import { GiftCardModal } from './components/GiftCardModal';
+import { GiftsModal } from './components/GiftsModal';
 import { FootballCard, Pack, MarketListing, BuyRequest, MarketSettings } from './types';
 import { formatCurrency, getDefaultStock, calculateCardMarketPrice, findCardByNumberOrId, getCardNumberSlug, getCardDirectUrl, isAdmin } from './lib/utils';
 import { db, auth, onAuthStateChanged, collection, doc, setDoc, getDoc, User, deleteDoc, onSnapshot, getDocs, increment, updateDoc, addDoc } from './lib/firebase';
@@ -64,6 +67,12 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopMoreOpen, setIsDesktopMoreOpen] = useState(false);
   const [isFilterTrayOpen, setIsFilterTrayOpen] = useState(false);
+
+  // Gift card system states
+  const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+  const [isGiftsModalOpen, setIsGiftsModalOpen] = useState(false);
+  const [cardToGift, setCardToGift] = useState<FootballCard | null>(null);
+  const [unopenedGiftsCount, setUnopenedGiftsCount] = useState<number>(0);
 
   // Public profile modal viewing target
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
@@ -213,6 +222,28 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toastMessage]);
+
+  // Realtime listener for gifts sent to current user
+  useEffect(() => {
+    if (!user) {
+      setUnopenedGiftsCount(0);
+      return;
+    }
+    const giftsRef = collection(db, 'gifts');
+    const unsubscribe = onSnapshot(giftsRef, (snapshot) => {
+      let unread = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.recipientUid === user.uid && !data.opened) {
+          unread++;
+        }
+      });
+      setUnopenedGiftsCount(unread);
+    }, (err) => {
+      console.error("Error listening to gifts:", err);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   // Helper to count how many copies the user owns of a card
   const getOwnedCount = (cardId: string) => vaultIds.filter(id => id === cardId).length;
@@ -648,6 +679,27 @@ export default function App() {
                         </span>
                       </button>
 
+                      {/* Gifts Inbox in Dropdown */}
+                      <button
+                        onClick={() => {
+                          setIsDesktopMoreOpen(false);
+                          setIsGiftsModalOpen(true);
+                        }}
+                        className="w-full px-3 py-2 text-left flex items-center justify-between text-xs font-black hover:bg-[#D4FF00] hover:text-black transition-colors text-neutral-700"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Gift size={14} className="text-black" />
+                          GIFTS INBOX
+                        </span>
+                        {unopenedGiftsCount > 0 ? (
+                          <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 font-black border border-black animate-pulse">
+                            {unopenedGiftsCount} NEW
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-neutral-400 font-bold">INBOX</span>
+                        )}
+                      </button>
+
                       <button
                         onClick={() => switchTab('custom')}
                         className={`w-full px-3 py-2 text-left flex items-center gap-2 text-xs font-black hover:bg-[#D4FF00] hover:text-black transition-colors ${
@@ -749,6 +801,10 @@ export default function App() {
               setSelectedCard(null);
               switchTab('shop');
             }}
+            onOpenGiftModal={(card) => {
+              setCardToGift(card);
+              setIsGiftModalOpen(true);
+            }}
           />
         ) : activeTab === 'profile' ? (
           <UserProfile
@@ -759,6 +815,12 @@ export default function App() {
             onSelectCard={handleSelectCard}
             onNavigateTab={(tab) => switchTab(tab)}
             onToggleFavorite={handleToggleFavorite}
+            onOpenGiftModal={() => {
+              setCardToGift(null);
+              setIsGiftModalOpen(true);
+            }}
+            onOpenGiftsInbox={() => setIsGiftsModalOpen(true)}
+            unopenedGiftsCount={unopenedGiftsCount}
           />
         ) : activeTab === 'marketplace' ? (
           <Marketplace
@@ -1066,6 +1128,33 @@ export default function App() {
                   {activeTab === 'favorites' && `YOU HAVE SAVED ${favoriteIds.size} FAVORITE CARDS.`}
                 </p>
               </div>
+
+              {activeTab === 'vault' && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setCardToGift(null);
+                      setIsGiftModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 bg-[#D4FF00] hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5"
+                  >
+                    <Gift size={14} />
+                    GIFT A CARD
+                  </button>
+                  <button
+                    onClick={() => setIsGiftsModalOpen(true)}
+                    className="px-3.5 py-2 bg-white hover:bg-neutral-100 text-black border-2 border-black font-black text-xs uppercase tracking-wider transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center gap-1.5 relative"
+                  >
+                    <Gift size={14} />
+                    GIFTS INBOX
+                    {unopenedGiftsCount > 0 && (
+                      <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-black animate-pulse">
+                        {unopenedGiftsCount} NEW
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Grid */}
@@ -1090,6 +1179,10 @@ export default function App() {
                       onToggleFavorite={(e) => {
                         e.stopPropagation();
                         handleToggleFavorite(item.card.id);
+                      }}
+                      onGift={(e, c) => {
+                        setCardToGift(c);
+                        setIsGiftModalOpen(true);
                       }}
                       onClick={(c) => handleSelectCard(c)} 
                     />
@@ -1430,6 +1523,36 @@ export default function App() {
         currentUserId={user?.uid}
         onSelectCard={handleSelectCard}
         onToast={(msg) => setToastMessage(msg)}
+      />
+
+      {/* Gift Card Modal */}
+      <GiftCardModal
+        isOpen={isGiftModalOpen}
+        onClose={() => {
+          setIsGiftModalOpen(false);
+          setCardToGift(null);
+        }}
+        currentUser={user}
+        cardToGift={cardToGift}
+        vaultCards={cards.filter(c => vaultIds.includes(c.id))}
+        onGiftSuccess={(giftedCard, recipientName) => {
+          setToastMessage(`🎁 GIFT SENT: ${giftedCard.player} has been gifted to ${recipientName}!`);
+        }}
+      />
+
+      {/* Gifts Inbox & History Modal */}
+      <GiftsModal
+        isOpen={isGiftsModalOpen}
+        onClose={() => setIsGiftsModalOpen(false)}
+        currentUser={user}
+        onOpenSendGift={() => {
+          setIsGiftsModalOpen(false);
+          setCardToGift(null);
+          setIsGiftModalOpen(true);
+        }}
+        onSelectCard={(c) => {
+          handleSelectCard(c);
+        }}
       />
     </div>
   );

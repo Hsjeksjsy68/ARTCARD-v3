@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FootballCard, Pack, CardTheme } from '../types';
+import { FootballCard, Pack, CardTheme, PackAnimationStyle } from '../types';
 import { 
   Edit2, 
   Trash2, 
@@ -33,10 +33,14 @@ import {
   Save,
   Download,
   Database,
-  Archive
+  Archive,
+  Zap,
+  Flame,
+  Crown,
+  Trophy
 } from 'lucide-react';
 import { db, doc, deleteDoc, updateDoc, setDoc, collection, getDocs, onSnapshot } from '../lib/firebase';
-import { formatCurrency, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice } from '../lib/utils';
+import { formatCurrency, getDefaultStock, getDefaultMaxSupply, getCardStartingPrice, cn } from '../lib/utils';
 import { cardsDatabase } from '../data';
 import { DEFAULT_OFFICIAL_THEMES, PRESET_OVERLAYS, PRESET_LOGOS, AVAILABLE_FONTS } from '../lib/themePresets';
 import { getCardNationalTeam, getCardClubTeam, getNationalTeamFlag, POPULAR_NATIONAL_TEAMS } from '../lib/teams';
@@ -355,6 +359,7 @@ export function ManageShop({
       editions: pack.editions || [],
       badgeText: pack.badgeText || '',
       coverPhotoUrl: pack.coverPhotoUrl || '',
+      openingAnimation: pack.openingAnimation || 'auto',
       rarityOdds: pack.rarityOdds || { base: 60, silver: 30, gold: 9, shield: 1 }
     });
   };
@@ -371,6 +376,7 @@ export function ManageShop({
       description: 'Exclusive football card pack.',
       editions: [],
       badgeText: 'HOT',
+      openingAnimation: 'auto',
       rarityOdds: { base: 60, silver: 30, gold: 9, shield: 1 }
     };
     setEditingPack(newPack);
@@ -1292,6 +1298,13 @@ export function ManageShop({
                       <div className="flex justify-between">
                         <span className="text-neutral-500">1-OF-1 SHIELD ODDS:</span>
                         <span className="font-mono text-amber-600 font-black">{pack.rarityOdds?.shield ?? 1}%</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-1 border-t border-black/10">
+                        <span className="text-neutral-500">ANIMATION INTRO:</span>
+                        <span className="bg-black text-[#D4FF00] font-mono text-[9px] font-black uppercase px-2 py-0.5 border border-black flex items-center gap-1">
+                          <Zap size={10} />
+                          {pack.openingAnimation || 'AUTO'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2966,6 +2979,144 @@ export function ManageShop({
                       className="w-full bg-white border-2 border-black p-1.5 text-xs font-mono font-bold"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Section 5: Pack Opening Animation & Walkout Experience */}
+              <div className="border-2 border-black p-4 bg-neutral-50 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-black/10 pb-2">
+                  <div>
+                    <span className="block text-[10px] font-black uppercase text-neutral-800 flex items-center gap-1.5">
+                      <Zap size={14} className="text-amber-500" />
+                      PACK OPENING ANIMATION & WALKOUT SEQUENCE
+                    </span>
+                    <span className="text-[9px] font-bold text-neutral-500">
+                      Select which cinematic intro soundscape and walkout sequence plays when users rip this pack.
+                    </span>
+                  </div>
+                  <span className="text-[9px] font-mono font-black bg-black text-[#D4FF00] px-2.5 py-1 border border-black uppercase tracking-wider self-start sm:self-auto">
+                    ACTIVE: {packEditForm.openingAnimation || 'auto'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {[
+                    {
+                      id: 'auto',
+                      title: 'Auto-Adaptive (Default)',
+                      subtitle: 'Smart Rarity Trigger',
+                      desc: 'Dynamically selects walkout & ambient audio based on highest rarity pulled (1-of-1, Gold, or Silver).',
+                      icon: <Zap size={16} className="text-[#D4FF00]" />,
+                      badge: 'SMART ENGINE',
+                      badgeBg: 'bg-black text-[#D4FF00]'
+                    },
+                    {
+                      id: 'mythic-1of1',
+                      title: '1-of-1 Mythic Shield',
+                      subtitle: 'Ultra-Rare Siren & Thunder',
+                      desc: 'Guaranteed 1-of-1 shield walkout with intense sirens, thunder claps, and high-voltage neon glow.',
+                      icon: <Crown size={16} className="text-yellow-400" />,
+                      badge: '1 OF 1 THEME',
+                      badgeBg: 'bg-[#D4FF00] text-black font-black'
+                    },
+                    {
+                      id: 'liquid-gold',
+                      title: 'Liquid Gold Autograph',
+                      subtitle: 'Certified Gold Fanfare',
+                      desc: 'Luxury gold particle burst, royal brass fanfare, and certified autograph seal inspection.',
+                      icon: <Flame size={16} className="text-amber-400" />,
+                      badge: 'GOLD THEME',
+                      badgeBg: 'bg-amber-400 text-black font-black'
+                    },
+                    {
+                      id: 'silver-refractor',
+                      title: 'Silver Refractor Beam',
+                      subtitle: 'Prismatic Laser Walkout',
+                      desc: 'Chromium laser sweeps, prismatic holographic glimmer, and high-tech card reveal beam.',
+                      icon: <Sparkles size={16} className="text-cyan-400" />,
+                      badge: 'SILVER THEME',
+                      badgeBg: 'bg-cyan-200 text-black font-black'
+                    },
+                    {
+                      id: 'stadium-base',
+                      title: 'Stadium Matchday Base',
+                      subtitle: 'Official Match Whistle',
+                      desc: 'Authentic referee stadium whistle, green floodlights, and clean official pitch opening.',
+                      icon: <Trophy size={16} className="text-emerald-500" />,
+                      badge: 'DEFAULT PITCH',
+                      badgeBg: 'bg-emerald-500 text-white font-black'
+                    },
+                    {
+                      id: 'retro-cyber',
+                      title: 'Retro Cyber Synth',
+                      subtitle: '80s Synthwave Glitch',
+                      desc: 'Arcade synth riser, magenta-cyan glitch grid, and futuristic stadium walkout.',
+                      icon: <Sliders size={16} className="text-fuchsia-400" />,
+                      badge: 'CYBER THEME',
+                      badgeBg: 'bg-fuchsia-600 text-white font-black'
+                    }
+                  ].map((style) => {
+                    const isSelected = (packEditForm.openingAnimation || 'auto') === style.id;
+                    return (
+                      <button
+                        key={style.id}
+                        type="button"
+                        onClick={() => setPackEditForm(prev => ({ ...prev, openingAnimation: style.id as PackAnimationStyle }))}
+                        className={cn(
+                          "p-3 border-2 text-left transition-all relative flex flex-col justify-between space-y-2 cursor-pointer",
+                          isSelected
+                            ? "bg-black text-white border-black shadow-[3px_3px_0px_0px_#D4FF00] scale-[1.01]"
+                            : "bg-white text-black border-black hover:bg-neutral-100"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-neutral-900 border border-neutral-700 shrink-0">
+                              {style.icon}
+                            </div>
+                            <div>
+                              <span className="block text-xs font-black uppercase leading-tight">
+                                {style.title}
+                              </span>
+                              <span className={cn(
+                                "text-[9px] font-bold block",
+                                isSelected ? "text-neutral-300" : "text-neutral-500"
+                              )}>
+                                {style.subtitle}
+                              </span>
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <div className="w-5 h-5 bg-[#D4FF00] text-black border border-black flex items-center justify-center shrink-0">
+                              <Check size={14} strokeWidth={3} />
+                            </div>
+                          )}
+                        </div>
+
+                        <p className={cn(
+                          "text-[9px] leading-relaxed",
+                          isSelected ? "text-neutral-300" : "text-neutral-600"
+                        )}>
+                          {style.desc}
+                        </p>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-black/10">
+                          <span className={cn(
+                            "text-[8px] font-black uppercase px-1.5 py-0.5 border border-black",
+                            style.badgeBg
+                          )}>
+                            {style.badge}
+                          </span>
+                          <span className={cn(
+                            "text-[8px] font-mono font-bold uppercase",
+                            isSelected ? "text-[#D4FF00]" : "text-neutral-500"
+                          )}>
+                            {isSelected ? 'ACTIVE' : 'SELECT'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
