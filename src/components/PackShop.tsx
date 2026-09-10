@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FootballCard, Pack } from '../types';
-import { PackageOpen, Sparkles, Truck, CreditCard, CheckCircle, Wallet, Info, Plus, Award } from 'lucide-react';
+import { PackageOpen, Sparkles, Truck, CreditCard, CheckCircle, Wallet, Info, Plus, Award, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatCurrency, drawRandomCards, getDefaultStock } from '../lib/utils';
 import { PackOpeningModal } from './PackOpeningModal';
@@ -31,6 +31,23 @@ export function PackShop({
   const [drawnCards, setDrawnCards] = useState<FootballCard[]>([]);
   const [isOpeningPack, setIsOpeningPack] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isPreviewOpening, setIsPreviewOpening] = useState(false);
+
+  // Preview Pack Intro handler (Free simulation for demo testing)
+  const handlePreviewPackIntro = (pack: Pack) => {
+    const odds = pack.rarityOdds || { base: 60, silver: 28, gold: 10, shield: 2 };
+    const drawn = drawRandomCards(cards, pack.size, odds, pack.editions);
+
+    if (drawn.length === 0) {
+      alert("No cards available in the pool right now for this pack.");
+      return;
+    }
+
+    setSelectedPackForOpening(pack);
+    setDrawnCards(drawn);
+    setIsPreviewOpening(true);
+    setIsOpeningPack(true);
+  };
 
   // Physical Order Modal
   const [selectedPhysicalPack, setSelectedPhysicalPack] = useState<Pack | null>(null);
@@ -127,6 +144,7 @@ export function PackShop({
       // 6. Open reveal modal
       setSelectedPackForOpening(pack);
       setDrawnCards(drawn);
+      setIsPreviewOpening(false);
       setIsOpeningPack(true);
       setIsPurchasing(false);
     } catch (error) {
@@ -304,33 +322,45 @@ export function PackShop({
               </div>
 
               {/* Action Button */}
-              <div className="pt-6 mt-auto">
+              <div className="pt-6 mt-auto space-y-2">
                 {shopMode === 'digital' ? (
-                  <button
-                    onClick={() => handleBuyDigitalPack(pack)}
-                    disabled={isPurchasing}
-                    className={`w-full py-4 font-black uppercase tracking-widest border-2 border-black transition-all text-sm flex items-center justify-center gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
-                      !user
-                        ? 'bg-black text-[#D4FF00] hover:bg-neutral-800'
-                        : canAfford
-                        ? 'bg-[#D4FF00] text-black hover:bg-black hover:text-[#D4FF00]'
-                        : 'bg-neutral-200 text-neutral-700 hover:bg-[#D4FF00] hover:text-black'
-                    }`}
-                  >
-                    {!user ? (
-                      'SIGN IN TO BUY'
-                    ) : canAfford ? (
-                      <>
-                        <Sparkles size={18} />
-                        BUY & OPEN ({formatCurrency(pack.price)})
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={16} />
-                        TOP UP & BUY ({formatCurrency(pack.price)})
-                      </>
-                    )}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => handleBuyDigitalPack(pack)}
+                      disabled={isPurchasing}
+                      className={`w-full py-4 font-black uppercase tracking-widest border-2 border-black transition-all text-sm flex items-center justify-center gap-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+                        !user
+                          ? 'bg-black text-[#D4FF00] hover:bg-neutral-800'
+                          : canAfford
+                          ? 'bg-[#D4FF00] text-black hover:bg-black hover:text-[#D4FF00]'
+                          : 'bg-neutral-200 text-neutral-700 hover:bg-[#D4FF00] hover:text-black'
+                      }`}
+                    >
+                      {!user ? (
+                        'SIGN IN TO BUY'
+                      ) : canAfford ? (
+                        <>
+                          <Sparkles size={18} />
+                          BUY & OPEN ({formatCurrency(pack.price)})
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={16} />
+                          TOP UP & BUY ({formatCurrency(pack.price)})
+                        </>
+                      )}
+                    </button>
+
+                    {/* Free Demo Preview Intro Button */}
+                    <button
+                      onClick={() => handlePreviewPackIntro(pack)}
+                      className="w-full py-2.5 bg-white hover:bg-black hover:text-[#D4FF00] text-black border-2 border-black font-black uppercase tracking-widest text-xs flex items-center justify-center gap-1.5 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                      title="Experience the new pack opening intro and 3D rip sequence"
+                    >
+                      <Play size={13} className="fill-current" />
+                      PREVIEW PACK INTRO (DEMO)
+                    </button>
+                  </>
                 ) : (
                   <button
                     onClick={() => handlePhysicalOrder(pack)}
@@ -352,12 +382,18 @@ export function PackShop({
           pack={selectedPackForOpening}
           drawnCards={drawnCards}
           isOpen={isOpeningPack}
+          isPreview={isPreviewOpening}
           onClose={() => {
             setIsOpeningPack(false);
             setSelectedPackForOpening(null);
+            setIsPreviewOpening(false);
           }}
           onOpenAnother={() => {
-            handleBuyDigitalPack(selectedPackForOpening);
+            if (isPreviewOpening) {
+              handlePreviewPackIntro(selectedPackForOpening);
+            } else {
+              handleBuyDigitalPack(selectedPackForOpening);
+            }
           }}
           walletBalance={walletBalance}
         />
